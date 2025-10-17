@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Mail, CheckCircle2, Clock, XCircle, Download, Pause, Play } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download } from "lucide-react";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -16,51 +19,77 @@ import {
 
 const CampaignDetail = () => {
   const { id } = useParams();
-  const [campaign] = useState({
-    id: 1,
-    name: "Q4 Product Launch",
-    status: "active",
-    total: 450,
-    sent: 312,
-    pending: 138,
-    failed: 0,
-    createdAt: "2025-01-15",
-    csvFile: "companies_q4.csv",
-    baseImage: "base_mockup.jpg",
-    perspectiveMode: true,
-  });
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [campaign, setCampaign] = useState<any>(null);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [emails] = useState([
-    {
-      id: 1,
-      company: "Acme Corp",
-      email: "contact@acme.com",
-      contact: "John Smith",
-      status: "sent",
-      sentAt: "2025-01-15 10:30",
-      logoUrl: "https://example.com/acme-logo.png",
-    },
-    {
-      id: 2,
-      company: "TechStart Inc",
-      email: "hello@techstart.io",
-      contact: "Jane Doe",
-      status: "sent",
-      sentAt: "2025-01-15 10:31",
-      logoUrl: "https://example.com/techstart-logo.png",
-    },
-    {
-      id: 3,
-      company: "Global Industries",
-      email: "info@global.com",
-      contact: "Bob Wilson",
-      status: "pending",
-      sentAt: null,
-      logoUrl: "https://example.com/global-logo.png",
-    },
-  ]);
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
 
-  const progress = (campaign.sent / campaign.total) * 100;
+  useEffect(() => {
+    if (user && id) {
+      fetchCampaignData();
+    }
+  }, [user, id]);
+
+  const fetchCampaignData = async () => {
+    try {
+      const { data: campaignData, error: campaignError } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (campaignError) throw campaignError;
+      setCampaign(campaignData);
+
+      const { data: contactsData, error: contactsError } = await supabase
+        .from("contacts")
+        .select("*")
+        .eq("campaign_id", id)
+        .order("created_at", { ascending: false });
+
+      if (contactsError) throw contactsError;
+      setContacts(contactsData || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load campaign data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!campaign) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Campaign not found</div>
+        </div>
+      </div>
+    );
+  }
+
+  const progress = campaign.total_contacts > 0 
+    ? (campaign.sent_count / campaign.total_contacts) * 100 
+    : 0;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -94,7 +123,7 @@ const CampaignDetail = () => {
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/">
+            <Link to="/dashboard">
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -110,10 +139,6 @@ const CampaignDetail = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <Pause className="mr-2 h-4 w-4" />
-              Pause
-            </Button>
             <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Export
@@ -132,7 +157,7 @@ const CampaignDetail = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-foreground">
-                  {campaign.sent} of {campaign.total} emails sent
+                  {campaign.sent_count} of {campaign.total_contacts} emails sent
                 </span>
                 <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
               </div>
@@ -143,7 +168,7 @@ const CampaignDetail = () => {
               <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{campaign.sent}</div>
+                  <div className="text-2xl font-bold text-foreground">{campaign.sent_count}</div>
                   <div className="text-sm text-muted-foreground">Sent</div>
                 </div>
               </div>
@@ -151,7 +176,7 @@ const CampaignDetail = () => {
               <div className="flex items-center gap-3 p-4 rounded-lg bg-accent/10 border border-accent/20">
                 <Clock className="h-8 w-8 text-accent" />
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{campaign.pending}</div>
+                  <div className="text-2xl font-bold text-foreground">{campaign.pending_count}</div>
                   <div className="text-sm text-muted-foreground">Pending</div>
                 </div>
               </div>
@@ -159,7 +184,7 @@ const CampaignDetail = () => {
               <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
                 <XCircle className="h-8 w-8 text-destructive" />
                 <div>
-                  <div className="text-2xl font-bold text-foreground">{campaign.failed}</div>
+                  <div className="text-2xl font-bold text-foreground">{campaign.failed_count}</div>
                   <div className="text-sm text-muted-foreground">Failed</div>
                 </div>
               </div>
@@ -176,21 +201,21 @@ const CampaignDetail = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Created:</span>
-                <span className="ml-2 font-medium text-foreground">{campaign.createdAt}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">CSV File:</span>
-                <span className="ml-2 font-medium text-foreground">{campaign.csvFile}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Base Image:</span>
-                <span className="ml-2 font-medium text-foreground">{campaign.baseImage}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Perspective Mode:</span>
                 <span className="ml-2 font-medium text-foreground">
-                  {campaign.perspectiveMode ? "Enabled" : "Disabled"}
+                  {new Date(campaign.created_at).toLocaleDateString()}
                 </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Status:</span>
+                <span className="ml-2 font-medium text-foreground capitalize">{campaign.status}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Subject:</span>
+                <span className="ml-2 font-medium text-foreground">{campaign.subject}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total Contacts:</span>
+                <span className="ml-2 font-medium text-foreground">{campaign.total_contacts}</span>
               </div>
             </div>
           </CardContent>
@@ -213,24 +238,32 @@ const CampaignDetail = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {emails.map((email) => (
-                  <TableRow key={email.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(email.status)}
-                        <Badge className={getStatusColor(email.status)}>
-                          {email.status}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{email.company}</TableCell>
-                    <TableCell>{email.contact}</TableCell>
-                    <TableCell className="text-muted-foreground">{email.email}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {email.sentAt || "-"}
+                {contacts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      No contacts found
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  contacts.map((contact) => (
+                    <TableRow key={contact.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(contact.status)}
+                          <Badge className={getStatusColor(contact.status)}>
+                            {contact.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">{contact.company || "-"}</TableCell>
+                      <TableCell>{contact.first_name || ""} {contact.last_name || ""}</TableCell>
+                      <TableCell className="text-muted-foreground">{contact.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {contact.sent_at ? new Date(contact.sent_at).toLocaleString() : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

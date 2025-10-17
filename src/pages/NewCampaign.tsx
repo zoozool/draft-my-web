@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,16 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Upload, ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 const NewCampaign = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [campaignName, setCampaignName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [bodyTemplate, setBodyTemplate] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [baseImage, setBaseImage] = useState<File | null>(null);
   const [perspectiveMode, setPerspectiveMode] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [user, loading, navigate]);
 
   const steps = [
     { number: 1, title: "Campaign Details", description: "Basic information" },
@@ -32,11 +45,66 @@ const NewCampaign = () => {
     if (step > 1) setStep(step - 1);
   };
 
-  const handleLaunch = () => {
-    toast({
-      title: "Campaign Launched!",
-      description: "Your campaign has been queued for processing.",
-    });
+  const handleLaunch = async () => {
+    if (!campaignName || !subject || !bodyTemplate || !csvFile || !user) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLaunching(true);
+
+    try {
+      // Create campaign
+      const { data: campaign, error: campaignError } = await supabase
+        .from("campaigns")
+        .insert({
+          name: campaignName,
+          subject,
+          body_template: bodyTemplate,
+          user_id: user.id,
+          status: "draft",
+        })
+        .select()
+        .single();
+
+      if (campaignError) throw campaignError;
+
+      // Read CSV file
+      const csvText = await csvFile.text();
+
+      // Process CSV via edge function
+      const { data: processData, error: processError } = await supabase.functions.invoke(
+        "process-csv",
+        {
+          body: {
+            campaignId: campaign.id,
+            csvContent: csvText,
+          },
+        }
+      );
+
+      if (processError) throw processError;
+
+      toast({
+        title: "Campaign Created!",
+        description: `${processData.contactsCreated} contacts added successfully.`,
+      });
+
+      navigate(`/campaigns/${campaign.id}`);
+    } catch (error: any) {
+      console.error("Error creating campaign:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create campaign",
+        variant: "destructive",
+      });
+    } finally {
+      setLaunching(false);
+    }
   };
 
   return (
@@ -199,46 +267,28 @@ const NewCampaign = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="subject1">First Email Subject</Label>
+                  <Label htmlFor="subject">Email Subject</Label>
                   <Input
-                    id="subject1"
-                    placeholder="e.g., Special offer for {{Company}}"
+                    id="subject"
+                    placeholder="e.g., Special offer for {{company}}"
                     className="mt-2"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="body1">First Email Body (HTML)</Label>
+                  <Label htmlFor="body">Email Body (HTML)</Label>
                   <Textarea
-                    id="body1"
-                    placeholder="Hello {{Contact}},..."
+                    id="body"
+                    placeholder="Hello {{first_name}},..."
                     className="mt-2 font-mono text-sm"
                     rows={8}
+                    value={bodyTemplate}
+                    onChange={(e) => setBodyTemplate(e.target.value)}
                   />
                 </div>
 
-                <div className="border-t pt-6">
-                  <h3 className="font-semibold mb-4">Follow-up Email</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="subject2">Subject</Label>
-                      <Input
-                        id="subject2"
-                        placeholder="Follow-up for {{Company}}"
-                        className="mt-2"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="body2">Body (HTML)</Label>
-                      <Textarea
-                        id="body2"
-                        placeholder="Hi {{Contact}}, just following up..."
-                        className="mt-2 font-mono text-sm"
-                        rows={6}
-                      />
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -291,9 +341,13 @@ const NewCampaign = () => {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
-                <Button onClick={handleLaunch} className="bg-gradient-to-r from-primary to-accent">
+                <Button 
+                  onClick={handleLaunch} 
+                  className="bg-gradient-to-r from-primary to-accent"
+                  disabled={launching}
+                >
                   <Check className="mr-2 h-4 w-4" />
-                  Launch Campaign
+                  {launching ? "Creating..." : "Create Campaign"}
                 </Button>
               )}
             </div>
