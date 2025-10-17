@@ -1,52 +1,70 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Send, Clock, CheckCircle2, XCircle, Plus, TrendingUp } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
-  const [stats] = useState({
-    totalCampaigns: 12,
-    activeCampaigns: 3,
-    totalEmails: 1247,
-    sentEmails: 1089,
-    pendingEmails: 158,
-    failedEmails: 0,
-  });
+  const { user, loading, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const [recentCampaigns] = useState([
-    {
-      id: 1,
-      name: "Q4 Product Launch",
-      status: "active",
-      total: 450,
-      sent: 312,
-      pending: 138,
-      failed: 0,
-      createdAt: "2025-01-15",
-    },
-    {
-      id: 2,
-      name: "Partner Outreach",
-      status: "completed",
-      total: 200,
-      sent: 200,
-      pending: 0,
-      failed: 0,
-      createdAt: "2025-01-10",
-    },
-    {
-      id: 3,
-      name: "Holiday Campaign",
-      status: "draft",
-      total: 0,
-      sent: 0,
-      pending: 0,
-      failed: 0,
-      createdAt: "2025-01-14",
-    },
-  ]);
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/auth");
+    }
+  }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (user) {
+      fetchCampaigns();
+    }
+  }, [user]);
+
+  const fetchCampaigns = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setCampaigns(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load campaigns",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const stats = {
+    totalCampaigns: campaigns.length,
+    activeCampaigns: campaigns.filter((c) => c.status === "active").length,
+    totalEmails: campaigns.reduce((sum, c) => sum + c.total_contacts, 0),
+    sentEmails: campaigns.reduce((sum, c) => sum + c.sent_count, 0),
+    pendingEmails: campaigns.reduce((sum, c) => sum + c.pending_count, 0),
+    failedEmails: campaigns.reduce((sum, c) => sum + c.failed_count, 0),
+  };
+
+  if (loading || loadingData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -72,12 +90,18 @@ const Dashboard = () => {
             </h1>
             <p className="text-sm text-muted-foreground">Campaign Management System</p>
           </div>
-          <Link to="/campaigns/new">
-            <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
-              <Plus className="mr-2 h-4 w-4" />
-              New Campaign
+          <div className="flex gap-2">
+            <Link to="/campaigns/new">
+              <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
+                <Plus className="mr-2 h-4 w-4" />
+                New Campaign
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={signOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign Out
             </Button>
-          </Link>
+          </div>
         </div>
       </header>
 
@@ -148,8 +172,13 @@ const Dashboard = () => {
             <CardDescription>Manage and monitor your email campaigns</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentCampaigns.map((campaign) => (
+            {campaigns.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No campaigns yet. Create your first campaign to get started!
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {campaigns.map((campaign) => (
                 <Link
                   key={campaign.id}
                   to={`/campaigns/${campaign.id}`}
@@ -168,28 +197,29 @@ const Dashboard = () => {
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Created {campaign.createdAt}
+                          Created {new Date(campaign.created_at).toLocaleDateString()}
                         </p>
                       </div>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-center">
+                          <div className="font-semibold text-foreground">{campaign.sent_count}</div>
+                          <div className="text-xs text-muted-foreground">Sent</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-semibold text-foreground">{campaign.pending_count}</div>
+                          <div className="text-xs text-muted-foreground">Pending</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-semibold text-foreground">{campaign.failed_count}</div>
+                          <div className="text-xs text-muted-foreground">Failed</div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div className="text-center">
-                        <div className="font-semibold text-foreground">{campaign.sent}</div>
-                        <div className="text-xs text-muted-foreground">Sent</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-semibold text-foreground">{campaign.pending}</div>
-                        <div className="text-xs text-muted-foreground">Pending</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-semibold text-foreground">{campaign.failed}</div>
-                        <div className="text-xs text-muted-foreground">Failed</div>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>
