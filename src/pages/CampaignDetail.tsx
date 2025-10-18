@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,6 +24,36 @@ const CampaignDetail = () => {
   const [campaign, setCampaign] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSendEmails = async () => {
+    if (!campaign) return;
+    
+    setIsSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-emails", {
+        body: { campaignId: campaign.id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Emails sent successfully",
+        description: `Sent ${data.sent} emails, ${data.failed} failed`,
+      });
+
+      // Refresh campaign data
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to send emails",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -139,6 +169,15 @@ const CampaignDetail = () => {
             </div>
           </div>
           <div className="flex gap-2">
+            {campaign.status === "draft" && campaign.pending_count > 0 && (
+              <Button 
+                onClick={handleSendEmails} 
+                disabled={isSending}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                {isSending ? "Sending..." : "Send Emails"}
+              </Button>
+            )}
             <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Export

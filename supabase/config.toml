@@ -1,1 +1,7 @@
 project_id = "wnmfjueqkrvfnlvfgcvn"
+
+[functions.process-csv]
+verify_jwt = false
+
+[functions.send-emails]
+verify_jwt = false
