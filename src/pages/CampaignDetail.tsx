@@ -77,6 +77,7 @@ const CampaignDetail = () => {
     company: "",
     logo_url: "",
   });
+  const [compositeErrors, setCompositeErrors] = useState<string[]>([]);
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -267,6 +268,7 @@ const CampaignDetail = () => {
     if (!campaign) return;
     
     setIsGenerating(true);
+    setCompositeErrors([]);
     try {
       const { data, error } = await supabase.functions.invoke("generate-composite-images", {
         body: { 
@@ -279,18 +281,17 @@ const CampaignDetail = () => {
 
       const hasErrors = data.errors && data.errors.length > 0;
       
+      if (hasErrors) {
+        setCompositeErrors(data.errors);
+      }
+      
       toast({
         title: hasErrors ? "Composite generation completed with errors" : "Composite images generated",
         description: hasErrors 
-          ? `${data.successful} succeeded, ${data.failed} failed. Check console for details.`
+          ? `${data.successful} succeeded, ${data.failed} failed. See error details below.`
           : `Successfully generated ${data.successful} images`,
         variant: hasErrors ? "destructive" : "default",
       });
-
-      if (hasErrors) {
-        console.error("Composite generation errors:", data.errors);
-        data.errors.forEach((err: string) => console.error("- ", err));
-      }
 
       fetchCampaignData();
     } catch (error: any) {
@@ -308,6 +309,7 @@ const CampaignDetail = () => {
     if (!campaign) return;
     
     setIsRegenerating(true);
+    setCompositeErrors([]);
     try {
       const { error: clearError } = await supabase
         .from("contacts")
@@ -333,18 +335,17 @@ const CampaignDetail = () => {
 
       const hasErrors = data.errors && data.errors.length > 0;
       
+      if (hasErrors) {
+        setCompositeErrors(data.errors);
+      }
+      
       toast({
         title: hasErrors ? "Regeneration completed with errors" : "Composites regenerated",
         description: hasErrors 
-          ? `${data.successful} succeeded, ${data.failed} failed. Check console for details.`
+          ? `${data.successful} succeeded, ${data.failed} failed. See error details below.`
           : `Successfully generated ${data.successful} images`,
         variant: hasErrors ? "destructive" : "default",
       });
-
-      if (hasErrors) {
-        console.error("Composite generation errors:", data.errors);
-        data.errors.forEach((err: string) => console.error("- ", err));
-      }
 
       fetchCampaignData();
     } catch (error: any) {
@@ -925,6 +926,43 @@ const CampaignDetail = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Composite Errors Display */}
+        {compositeErrors.length > 0 && (
+          <Card className="mb-8 shadow-[var(--shadow-card)] border-destructive/50 bg-destructive/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-destructive">Composite Generation Errors</CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setCompositeErrors([])}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {compositeErrors.map((error, index) => (
+                  <div key={index} className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                    <p className="text-sm text-foreground font-mono">{error}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 p-4 bg-muted/50 rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Common solutions:</strong>
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                  <li>WebP logos: Convert to PNG or JPEG format</li>
+                  <li>Invalid URLs: Check that logo URLs are accessible</li>
+                  <li>Large files: Ensure logos are under 10MB</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Composite Images Gallery */}
         {contacts.some(c => c.composite_image_url) && (
