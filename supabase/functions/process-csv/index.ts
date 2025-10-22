@@ -26,19 +26,44 @@ serve(async (req) => {
 
     // Parse CSV content
     const lines = csvContent.split("\n").filter((line: string) => line.trim());
-    const headers = lines[0].split(",").map((h: string) => h.trim().toLowerCase());
+    const firstLine = lines[0].split(",").map((h: string) => h.trim().toLowerCase());
     
-    const emailIndex = headers.findIndex((h: string) => h === "email");
-    const firstNameIndex = headers.findIndex((h: string) => h === "first_name" || h === "firstname");
-    const lastNameIndex = headers.findIndex((h: string) => h === "last_name" || h === "lastname");
-    const companyIndex = headers.findIndex((h: string) => h === "company");
-
-    if (emailIndex === -1) {
-      throw new Error("CSV must contain an 'email' column");
+    // Check if first line contains headers or data (by looking for email pattern)
+    const hasHeaders = firstLine.some((cell: string) => 
+      cell === "email" || cell === "company" || cell === "contact" || cell === "logourl" || cell === "logo_url"
+    );
+    
+    let emailIndex, firstNameIndex, lastNameIndex, companyIndex, logoUrlIndex;
+    let startIndex;
+    
+    if (hasHeaders) {
+      // Parse with headers
+      emailIndex = firstLine.findIndex((h: string) => h === "email");
+      firstNameIndex = firstLine.findIndex((h: string) => 
+        h === "first_name" || h === "firstname" || h === "contact" || h === "name"
+      );
+      lastNameIndex = firstLine.findIndex((h: string) => h === "last_name" || h === "lastname");
+      companyIndex = firstLine.findIndex((h: string) => h === "company");
+      logoUrlIndex = firstLine.findIndex((h: string) => h === "logourl" || h === "logo_url" || h === "logo");
+      startIndex = 1; // Skip header row
+      
+      if (emailIndex === -1) {
+        throw new Error("CSV must contain an 'email' column");
+      }
+    } else {
+      // No headers - assume positional format: Company, Email, Contact, LogoURL
+      companyIndex = 0;
+      emailIndex = 1;
+      firstNameIndex = 2;
+      logoUrlIndex = 3;
+      lastNameIndex = -1;
+      startIndex = 0; // Start from first line
+      
+      console.log("No headers detected, using positional format: Company, Email, Contact, LogoURL");
     }
 
     const contacts = [];
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = startIndex; i < lines.length; i++) {
       const values = lines[i].split(",").map((v: string) => v.trim());
       const email = values[emailIndex];
       
@@ -49,6 +74,7 @@ serve(async (req) => {
           first_name: firstNameIndex >= 0 ? values[firstNameIndex] : null,
           last_name: lastNameIndex >= 0 ? values[lastNameIndex] : null,
           company: companyIndex >= 0 ? values[companyIndex] : null,
+          logo_url: logoUrlIndex >= 0 ? values[logoUrlIndex] : null,
           status: "pending",
         });
       }
