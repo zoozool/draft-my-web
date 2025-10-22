@@ -85,6 +85,49 @@ const CampaignDetail = () => {
     }
   };
 
+  const handleResetCampaign = async () => {
+    if (!campaign) return;
+    
+    setIsStarting(true);
+    try {
+      // Reset all contacts to pending
+      const { error: contactsError } = await supabase
+        .from("contacts")
+        .update({ status: "pending", sent_at: null, error_message: null })
+        .eq("campaign_id", campaign.id);
+
+      if (contactsError) throw contactsError;
+
+      // Reset campaign to draft
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ 
+          status: "draft",
+          sent_count: 0,
+          failed_count: 0,
+          pending_count: campaign.total_contacts
+        })
+        .eq("id", campaign.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Campaign reset",
+        description: "Campaign has been reset to draft status",
+      });
+
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to reset campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -216,6 +259,15 @@ const CampaignDetail = () => {
               >
                 <Mail className="h-4 w-4 mr-2" />
                 {isSending ? "Sending..." : "Send Now"}
+              </Button>
+            )}
+            {(campaign.status === "completed" || campaign.status === "active") && (
+              <Button 
+                onClick={handleResetCampaign} 
+                disabled={isStarting}
+                variant="outline"
+              >
+                {isStarting ? "Resetting..." : "Reset Campaign"}
               </Button>
             )}
             <Button variant="outline">
