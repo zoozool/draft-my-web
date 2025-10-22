@@ -119,9 +119,11 @@ const CampaignDetail = () => {
 
       if (error) throw error;
 
+      const result = data?.results?.[0] || { sent: 0, failed: 0 };
+      
       toast({
         title: "Emails sent successfully",
-        description: `Sent ${data.sent} emails, ${data.failed} failed`,
+        description: `Sent ${result.sent} emails, ${result.failed} failed`,
       });
 
       // Refresh campaign data
