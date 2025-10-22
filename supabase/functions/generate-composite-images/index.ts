@@ -6,23 +6,118 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface Point {
-  x: number;
-  y: number;
-}
-
 interface CompositeRequest {
   campaignId: string;
-  baseImageUrl?: string; // Optional: URL to base image
-  coordinates?: {
-    topLeft: Point;
-    topRight: Point;
-    bottomRight: Point;
-    bottomLeft: Point;
-  };
-  simpleMode?: boolean; // If true, use simple rectangle placement
-  targetWidth?: number;
-  targetHeight?: number;
+  baseImageUrl?: string;
+}
+
+// Simple image compositing using Canvas API
+async function compositeImages(
+  baseImageUrl: string,
+  logoUrl: string,
+  targetX: number,
+  targetY: number,
+  targetWidth: number,
+  targetHeight: number
+): Promise<Uint8Array> {
+  // Download both images
+  const [baseResponse, logoResponse] = await Promise.all([
+    fetch(baseImageUrl),
+    fetch(logoUrl)
+  ]);
+
+  if (!baseResponse.ok || !logoResponse.ok) {
+    throw new Error("Failed to download images");
+  }
+
+  const baseBlob = await baseResponse.blob();
+  const logoBlob = await logoResponse.blob();
+
+  // Convert to base64 for processing
+  const baseArrayBuffer = await baseBlob.arrayBuffer();
+  const logoArrayBuffer = await logoBlob.arrayBuffer();
+
+  // Use Lovable AI to composite (since Canvas API is not easily available in Deno)
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured");
+  }
+
+  // Convert base image to base64
+  const base64Base = btoa(String.fromCharCode(...new Uint8Array(baseArrayBuffer)));
+  const baseDataUrl = `data:${baseBlob.type};base64,${base64Base}`;
+
+  const base64Logo = btoa(String.fromCharCode(...new Uint8Array(logoArrayBuffer)));
+  const logoDataUrl = `data:${logoBlob.type};base64,${base64Logo}`;
+
+  // Use AI to composite the logo precisely
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-image-preview",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Composite this logo onto the base image at position (${targetX}, ${targetY}). Resize the logo to fit within ${targetWidth}x${targetHeight} pixels while maintaining its aspect ratio. Center it in that area. Keep all other parts of the base image unchanged. Logo URL: ${logoUrl}`
+          },
+          {
+            type: "image_url",
+            image_url: { url: baseDataUrl }
+          }
+        ]
+      }],
+      modalities: ["image", "text"]
+    })
+  });
+
+  const data = await response.json();
+  const compositeBase64 = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+  if (!compositeBase64) {
+    throw new Error("Failed to generate composite image");
+  }
+
+  // Convert back to buffer
+  const base64Data = compositeBase64.split(",")[1];
+  return Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+}
+
+// Default base image generator
+async function generateBaseImage(
+  topLeftX: number,
+  topLeftY: number,
+  bottomRightX: number,
+  bottomRightY: number
+): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured");
+  }
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-image-preview",
+      messages: [{
+        role: "user",
+        content: `Create a professional email background image sized 1920x1080 pixels. Include a clean, solid white rectangular area starting at pixel position (${topLeftX}, ${topLeftY}) and ending at (${bottomRightX}, ${bottomRightY}). This white area should be perfectly white (#FFFFFF) with sharp edges. The rest of the image should have a subtle, professional gradient background in soft blue and gray tones. The white rectangle must be clearly defined and ready for logo placement.`
+      }],
+      modalities: ["image", "text"]
+    })
+  });
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -39,19 +134,13 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
     const body: CompositeRequest = await req.json();
-    const { 
-      campaignId, 
-      baseImageUrl,
-      coordinates = {
-        topLeft: { x: 888, y: 500 },
-        topRight: { x: 1201, y: 493 },
-        bottomRight: { x: 1198, y: 724 },
-        bottomLeft: { x: 886, y: 726 }
-      },
-      simpleMode = true,
-      targetWidth = 313,
-      targetHeight = 226
-    } = body;
+    const { campaignId, baseImageUrl } = body;
+
+    // Default coordinates for the white rectangle
+    const targetX = 888;
+    const targetY = 500;
+    const targetWidth = 313;
+    const targetHeight = 226;
 
     if (!campaignId) {
       return new Response(
@@ -60,12 +149,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Fetch all contacts for this campaign that need image generation
+    // Fetch contacts needing composite generation
     const { data: contacts, error: contactsError } = await supabaseClient
       .from("contacts")
       .select("*")
       .eq("campaign_id", campaignId)
-      .is("composite_image_url", null); // Only process contacts without generated images
+      .not("logo_url", "is", null)
+      .is("composite_image_url", null);
 
     if (contactsError) throw contactsError;
 
@@ -74,7 +164,9 @@ const handler = async (req: Request): Promise<Response> => {
         JSON.stringify({ 
           success: true, 
           message: "No contacts need image generation",
-          processed: 0 
+          processed: 0,
+          successful: 0,
+          failed: 0
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -82,114 +174,38 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Processing ${contacts.length} contacts for composite image generation`);
 
+    // Get or generate base image
+    let finalBaseImageUrl = baseImageUrl;
+    if (!finalBaseImageUrl) {
+      console.log("No base image provided, generating one...");
+      finalBaseImageUrl = await generateBaseImage(targetX, targetY, targetX + targetWidth, targetY + targetHeight);
+      console.log("Base image generated");
+    }
+
     let successCount = 0;
     let failCount = 0;
     const errors: string[] = [];
 
     for (const contact of contacts) {
       try {
-        if (!contact.logo_url) {
-          console.log(`[${contact.email}] No logo URL, skipping`);
-          continue;
-        }
+        console.log(`[${contact.email}] Compositing logo: ${contact.logo_url}`);
 
-        console.log(`[${contact.email}] Generating composite with logo: ${contact.logo_url}`);
-
-        // In a real implementation, you would:
-        // 1. Fetch the base image
-        // 2. Fetch the logo image
-        // 3. Use a library like sharp (not available in Deno) or call an external service
-        // 4. Composite the images
-        // 5. Upload to storage
-        // 6. Update the contact with the composite_image_url
-
-        // For now, we'll demonstrate the flow with the Lovable AI image editing API
-        // This generates a composite by describing what we want
-
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        
-        if (!LOVABLE_API_KEY) {
-          console.log("LOVABLE_API_KEY not set, skipping AI generation");
-          // Fallback to using logo URL directly
-          await supabaseClient
-            .from("contacts")
-            .update({ composite_image_url: contact.logo_url })
-            .eq("id", contact.id);
-          successCount++;
-          continue;
-        }
-
-        // Use Lovable AI to composite the logo onto the base image
-        let imageToUse = baseImageUrl;
-        
-        if (!imageToUse) {
-          // Generate a base image with white rectangle area if not provided
-          const baseImageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-image-preview",
-              messages: [{
-                role: "user",
-                content: `Create a professional email background image (1920x1080) with a clean white rectangular area at coordinates from top-left (${coordinates.topLeft.x},${coordinates.topLeft.y}) to bottom-right (${coordinates.bottomRight.x},${coordinates.bottomRight.y}). The rectangle should be clearly defined and ready for logo placement. Use a subtle gradient background.`
-              }],
-              modalities: ["image", "text"]
-            })
-          });
-
-          const baseImageData = await baseImageResponse.json();
-          imageToUse = baseImageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        }
-
-        if (!imageToUse) {
-          throw new Error("Failed to get base image");
-        }
-
-        // Now composite the logo onto the base image
-        const compositeResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image-preview",
-            messages: [{
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Place the logo from ${contact.logo_url} into the white rectangle area, centered and properly scaled to fit within ${targetWidth}x${targetHeight} pixels while maintaining aspect ratio. The logo should be clearly visible and professional.`
-                },
-                {
-                  type: "image_url",
-                  image_url: { url: imageToUse }
-                }
-              ]
-            }],
-            modalities: ["image", "text"]
-          })
-        });
-
-        const compositeData = await compositeResponse.json();
-        const compositeImageBase64 = compositeData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-        if (!compositeImageBase64) {
-          throw new Error("Failed to generate composite image");
-        }
+        // Generate composite image
+        const compositeBuffer = await compositeImages(
+          finalBaseImageUrl,
+          contact.logo_url,
+          targetX,
+          targetY,
+          targetWidth,
+          targetHeight
+        );
 
         // Upload to Supabase Storage
-        const fileName = `${contact.id}-composite.png`;
-        const base64Data = compositeImageBase64.split(",")[1];
-        const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-
-        const { data: uploadData, error: uploadError } = await supabaseClient
+        const fileName = `${contact.id}-${Date.now()}.png`;
+        const { error: uploadError } = await supabaseClient
           .storage
           .from("logos")
-          .upload(`composites/${fileName}`, imageBuffer, {
+          .upload(`composites/${fileName}`, compositeBuffer, {
             contentType: "image/png",
             upsert: true
           });
@@ -202,7 +218,7 @@ const handler = async (req: Request): Promise<Response> => {
           .from("logos")
           .getPublicUrl(`composites/${fileName}`);
 
-        // Update contact with composite image URL
+        // Update contact
         const { error: updateError } = await supabaseClient
           .from("contacts")
           .update({ composite_image_url: urlData.publicUrl })
@@ -210,11 +226,11 @@ const handler = async (req: Request): Promise<Response> => {
 
         if (updateError) throw updateError;
 
-        console.log(`[${contact.email}] ✅ Composite image generated: ${urlData.publicUrl}`);
+        console.log(`[${contact.email}] ✅ Success: ${urlData.publicUrl}`);
         successCount++;
 
       } catch (error: any) {
-        console.error(`[${contact.email}] ❌ Failed to generate composite:`, error);
+        console.error(`[${contact.email}] ❌ Error:`, error.message);
         failCount++;
         errors.push(`${contact.email}: ${error.message}`);
       }
@@ -228,20 +244,14 @@ const handler = async (req: Request): Promise<Response> => {
         failed: failCount,
         errors: errors.length > 0 ? errors : undefined
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: any) {
     console.error("Error in generate-composite-images function:", error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 };
