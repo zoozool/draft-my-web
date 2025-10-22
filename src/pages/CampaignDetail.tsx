@@ -34,7 +34,7 @@ const CampaignDetail = () => {
     try {
       const { error } = await supabase
         .from("campaigns")
-        .update({ status: "sending" })
+        .update({ status: "active" })
         .eq("id", campaign.id);
 
       if (error) throw error;
@@ -208,7 +208,7 @@ const CampaignDetail = () => {
                 {isStarting ? "Starting..." : "Start Campaign"}
               </Button>
             )}
-            {campaign.status === "sending" && campaign.pending_count > 0 && (
+            {campaign.status === "active" && campaign.pending_count > 0 && (
               <Button 
                 onClick={handleSendEmails} 
                 disabled={isSending}

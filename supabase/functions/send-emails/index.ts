@@ -34,11 +34,11 @@ const handler = async (req: Request): Promise<Response> => {
       campaignIds = [campaignId];
       console.log("Processing emails for specific campaign:", campaignId);
     } else {
-      // Find all campaigns with status 'sending' and pending contacts
+      // Find all campaigns with status 'active' and pending contacts
       const { data: eligibleCampaigns, error: campaignsError } = await supabaseClient
         .from("campaigns")
         .select("id")
-        .eq("status", "sending")
+        .eq("status", "active")
         .gt("pending_count", 0);
 
       if (campaignsError) {
@@ -157,7 +157,7 @@ const handler = async (req: Request): Promise<Response> => {
           sent_count: newSentCount,
           failed_count: newFailedCount,
           pending_count: newPendingCount,
-          status: newPendingCount === 0 ? "completed" : "sending",
+          status: newPendingCount === 0 ? "completed" : "active",
         })
         .eq("id", currentCampaignId);
 
@@ -174,7 +174,7 @@ const handler = async (req: Request): Promise<Response> => {
         success: true,
         sent: sentCount,
         failed: failedCount,
-        status: newPendingCount === 0 ? "completed" : "sending",
+        status: newPendingCount === 0 ? "completed" : "active",
       });
     }
 
