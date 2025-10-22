@@ -708,6 +708,36 @@ const CampaignDetail = () => {
           </CardContent>
         </Card>
 
+        {/* Composite Images Gallery */}
+        {contacts.some(c => c.composite_image_url) && (
+          <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
+            <CardHeader>
+              <CardTitle>Generated Composite Images</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {contacts
+                  .filter(contact => contact.composite_image_url)
+                  .map((contact) => (
+                    <div key={contact.id} className="space-y-2">
+                      <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted">
+                        <img
+                          src={contact.composite_image_url}
+                          alt={`Composite for ${contact.company || contact.email}`}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <p className="font-medium text-foreground">{contact.company || "No company"}</p>
+                        <p className="text-muted-foreground text-xs">{contact.email}</p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Email List */}
         <Card className="shadow-[var(--shadow-card)] border-border/50">
           <CardHeader>
