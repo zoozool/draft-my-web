@@ -258,11 +258,38 @@ const NewCampaign = () => {
 
             {step === 3 && (
               <div className="space-y-6">
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Available variables: <code className="text-primary">{'{{Company}}'}</code>,{' '}
-                    <code className="text-primary">{'{{Contact}}'}</code>,{' '}
-                    <code className="text-primary">{'{{INLINE_CID}}'}</code>
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                  <p className="text-sm text-muted-foreground font-semibold mb-2">
+                    Available variables:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{company}}'}</code>
+                      <span className="text-muted-foreground ml-2">- Company name</span>
+                    </div>
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{first_name}}'}</code>
+                      <span className="text-muted-foreground ml-2">- First name</span>
+                    </div>
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{last_name}}'}</code>
+                      <span className="text-muted-foreground ml-2">- Last name</span>
+                    </div>
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{contact}}'}</code>
+                      <span className="text-muted-foreground ml-2">- Full name</span>
+                    </div>
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{email}}'}</code>
+                      <span className="text-muted-foreground ml-2">- Email address</span>
+                    </div>
+                    <div>
+                      <code className="text-primary bg-primary/10 px-2 py-1 rounded">{'{{logo_url}}'}</code>
+                      <span className="text-muted-foreground ml-2">- Logo image URL</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Example: Use <code className="text-primary bg-primary/10 px-1 rounded">{'<img src="{{logo_url}}" alt="{{company}} logo" />'}</code> to insert logo
                   </p>
                 </div>
 

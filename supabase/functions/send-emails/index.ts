@@ -219,10 +219,13 @@ const handler = async (req: Request): Promise<Response> => {
         try {
           // Personalize email body
           let personalizedBody = campaign.body_template;
-          personalizedBody = personalizedBody.replace(/\{\{first_name\}\}/g, contact.first_name || "");
-          personalizedBody = personalizedBody.replace(/\{\{last_name\}\}/g, contact.last_name || "");
-          personalizedBody = personalizedBody.replace(/\{\{company\}\}/g, contact.company || "");
-          personalizedBody = personalizedBody.replace(/\{\{email\}\}/g, contact.email);
+          personalizedBody = personalizedBody.replace(/\{\{first_name\}\}/gi, contact.first_name || "");
+          personalizedBody = personalizedBody.replace(/\{\{last_name\}\}/gi, contact.last_name || "");
+          personalizedBody = personalizedBody.replace(/\{\{company\}\}/gi, contact.company || "");
+          personalizedBody = personalizedBody.replace(/\{\{email\}\}/gi, contact.email);
+          personalizedBody = personalizedBody.replace(/\{\{contact\}\}/gi, `${contact.first_name || ""} ${contact.last_name || ""}`.trim());
+          personalizedBody = personalizedBody.replace(/\{\{logo_url\}\}/gi, contact.logo_url || "");
+          personalizedBody = personalizedBody.replace(/\{\{INLINE_CID\}\}/gi, contact.logo_url || "");
 
           console.log(`[${contact.email}] Starting email send process...`);
           console.log(`[${contact.email}] Subject: ${campaign.subject}`);
