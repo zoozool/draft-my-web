@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,82 +9,114 @@ const corsHeaders = {
 
 interface CompositeRequest {
   campaignId: string;
-  baseImageUrl?: string;
+  baseImageUrl?: string; // URL to bazowy.jpg or leave empty to use default
 }
 
-// Generate composite using AI - simplified version
-async function compositeImages(
+interface Point {
+  x: number;
+  y: number;
+}
+
+// Calculate perspective transformation matrix
+function calculatePerspectiveTransform(
+  sourceCorners: Point[],
+  destCorners: Point[]
+): number[][] {
+  // Simplified perspective transform using bilinear interpolation
+  // For production, you'd use a full perspective transformation matrix
+  const [tl, tr, br, bl] = destCorners;
+  
+  // Calculate the bounding box of the destination quadrilateral
+  const minX = Math.min(tl.x, tr.x, br.x, bl.x);
+  const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
+  const minY = Math.min(tl.y, tr.y, br.y, bl.y);
+  const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
+  
+  return [[minX, minY, maxX - minX, maxY - minY]];
+}
+
+// Composite logo onto base image at specified quadrilateral coordinates
+async function compositeLogoOntoBase(
   baseImageUrl: string,
   logoUrl: string,
-  targetX: number,
-  targetY: number,
-  targetWidth: number,
-  targetHeight: number
+  destCorners: Point[]
 ): Promise<Uint8Array> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
+  console.log("Downloading base image...");
+  const baseResponse = await fetch(baseImageUrl);
+  if (!baseResponse.ok) throw new Error(`Failed to fetch base image: ${baseResponse.status}`);
+  const baseBuffer = await baseResponse.arrayBuffer();
+  const baseImage = await Image.decode(new Uint8Array(baseBuffer));
+
+  console.log("Downloading logo...");
+  const logoResponse = await fetch(logoUrl);
+  if (!logoResponse.ok) throw new Error(`Failed to fetch logo: ${logoResponse.status}`);
+  const logoBuffer = await logoResponse.arrayBuffer();
+  const logoImage = await Image.decode(new Uint8Array(logoBuffer));
+
+  // Calculate bounding box of the destination quadrilateral
+  const [tl, tr, br, bl] = destCorners;
+  const minX = Math.floor(Math.min(tl.x, tr.x, br.x, bl.x));
+  const maxX = Math.ceil(Math.max(tl.x, tr.x, br.x, bl.x));
+  const minY = Math.floor(Math.min(tl.y, tr.y, br.y, bl.y));
+  const maxY = Math.ceil(Math.max(tl.y, tr.y, br.y, bl.y));
+  
+  const targetWidth = maxX - minX;
+  const targetHeight = maxY - minY;
+
+  console.log(`Target area: ${targetWidth}x${targetHeight} at (${minX}, ${minY})`);
+
+  // Resize logo to fit target area while maintaining aspect ratio
+  const logoAspect = logoImage.width / logoImage.height;
+  const targetAspect = targetWidth / targetHeight;
+  
+  let resizedWidth: number, resizedHeight: number;
+  if (logoAspect > targetAspect) {
+    // Logo is wider - fit to width
+    resizedWidth = targetWidth;
+    resizedHeight = Math.floor(targetWidth / logoAspect);
+  } else {
+    // Logo is taller - fit to height
+    resizedHeight = targetHeight;
+    resizedWidth = Math.floor(targetHeight * logoAspect);
   }
 
-  console.log(`Compositing: base=${baseImageUrl.substring(0, 50)}..., logo=${logoUrl.substring(0, 50)}...`);
+  console.log(`Resizing logo from ${logoImage.width}x${logoImage.height} to ${resizedWidth}x${resizedHeight}`);
+  const resizedLogo = logoImage.resize(resizedWidth, resizedHeight);
 
-  // Use AI to composite - pass URLs directly instead of converting to base64
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image-preview",
-      messages: [{
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: `Take the base image and overlay the logo at position (${targetX}, ${targetY}). The logo should be resized to fit within ${targetWidth}x${targetHeight} pixels while maintaining aspect ratio. Center it within that area. The logo URL is: ${logoUrl}`
-          },
-          {
-            type: "image_url",
-            image_url: { url: baseImageUrl }
-          }
-        ]
-      }],
-      modalities: ["image", "text"]
-    })
-  });
+  // Center the resized logo within the target area
+  const offsetX = minX + Math.floor((targetWidth - resizedWidth) / 2);
+  const offsetY = minY + Math.floor((targetHeight - resizedHeight) / 2);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI API error: ${response.status} - ${errorText}`);
-  }
+  console.log(`Placing logo at (${offsetX}, ${offsetY})`);
 
-  const data = await response.json();
-  const compositeBase64 = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  // Composite the logo onto the base image
+  baseImage.composite(resizedLogo, offsetX, offsetY);
 
-  if (!compositeBase64) {
-    throw new Error("No image returned from AI");
-  }
-
-  // Convert base64 to buffer
-  const base64Data = compositeBase64.split(",")[1];
-  return Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+  // Encode as PNG
+  console.log("Encoding final image...");
+  return await baseImage.encode();
 }
 
-// Default base image generator
-async function generateBaseImage(
-  topLeftX: number,
-  topLeftY: number,
-  bottomRightX: number,
-  bottomRightY: number
+// Get or create base image with white rectangle
+async function getOrCreateBaseImage(
+  baseImageUrl: string | undefined,
+  destCorners: Point[]
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
+  // If user provides bazowy.jpg URL, use it
+  if (baseImageUrl) {
+    return baseImageUrl;
   }
 
-  console.log("Generating base image with AI...");
+  // Otherwise, generate a default base image with white rectangle
+  console.log("No base image provided, generating default with white rectangle...");
+  
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured - needed to generate base image");
+  }
 
+  const [tl, tr, br, bl] = destCorners;
+  
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -94,7 +127,7 @@ async function generateBaseImage(
       model: "google/gemini-2.5-flash-image-preview",
       messages: [{
         role: "user",
-        content: `Create a professional email background image 1920x1080 pixels. Add a solid white (#FFFFFF) rectangle from pixel (${topLeftX}, ${topLeftY}) to (${bottomRightX}, ${bottomRightY}). Use a subtle blue-gray gradient for the rest.`
+        content: `Create a professional email background image 1920x1080 pixels. Draw a solid white (#FFFFFF) quadrilateral with corners at exact pixel coordinates: top-left (${tl.x},${tl.y}), top-right (${tr.x},${tr.y}), bottom-right (${br.x},${br.y}), bottom-left (${bl.x},${bl.y}). The rest should be a subtle blue-gray gradient. The white area must have sharp edges and be perfectly white.`
       }],
       modalities: ["image", "text"]
     })
@@ -102,11 +135,17 @@ async function generateBaseImage(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`AI API error: ${response.status} - ${errorText}`);
+    throw new Error(`Failed to generate base image: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  
+  if (!imageUrl) {
+    throw new Error("No image URL returned from AI");
+  }
+
+  return imageUrl;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -115,7 +154,8 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    console.log("generate-composite-images invoked at", new Date().toISOString());
+    console.log("=== Generate Composite Images ===");
+    console.log("Invoked at:", new Date().toISOString());
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -125,11 +165,14 @@ const handler = async (req: Request): Promise<Response> => {
     const body: CompositeRequest = await req.json();
     const { campaignId, baseImageUrl } = body;
 
-    // Default coordinates
-    const targetX = 888;
-    const targetY = 500;
-    const targetWidth = 313;
-    const targetHeight = 226;
+    // Define the white rectangle coordinates (quadrilateral)
+    // TL (888,500), TR (1201,493), BR (1198,724), BL (886,726)
+    const destCorners: Point[] = [
+      { x: 888, y: 500 },   // Top-Left
+      { x: 1201, y: 493 },  // Top-Right
+      { x: 1198, y: 724 },  // Bottom-Right
+      { x: 886, y: 726 }    // Bottom-Left
+    ];
 
     if (!campaignId) {
       return new Response(
@@ -137,6 +180,9 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("Campaign ID:", campaignId);
+    console.log("Destination corners:", destCorners);
 
     // Fetch contacts needing composite generation
     const { data: contacts, error: contactsError } = await supabaseClient
@@ -149,6 +195,7 @@ const handler = async (req: Request): Promise<Response> => {
     if (contactsError) throw contactsError;
 
     if (!contacts || contacts.length === 0) {
+      console.log("No contacts need image generation");
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -163,13 +210,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Processing ${contacts.length} contacts`);
 
-    // Get or generate base image
-    let finalBaseImageUrl = baseImageUrl;
-    if (!finalBaseImageUrl) {
-      console.log("No base image provided, generating...");
-      finalBaseImageUrl = await generateBaseImage(targetX, targetY, targetX + targetWidth, targetY + targetHeight);
-      console.log("Base image generated");
-    }
+    // Get or create base image (bazowy.jpg or default)
+    const finalBaseImageUrl = await getOrCreateBaseImage(baseImageUrl, destCorners);
+    console.log("Base image ready:", finalBaseImageUrl.substring(0, 100) + "...");
 
     let successCount = 0;
     let failCount = 0;
@@ -177,19 +220,20 @@ const handler = async (req: Request): Promise<Response> => {
 
     for (const contact of contacts) {
       try {
-        console.log(`[${contact.email}] Compositing logo: ${contact.logo_url}`);
+        console.log(`\n[${contact.email}] Starting...`);
+        console.log(`[${contact.email}] Logo URL: ${contact.logo_url}`);
+        console.log(`[${contact.email}] Company: ${contact.company || 'N/A'}`);
 
-        // Generate composite
-        const compositeBuffer = await compositeImages(
+        // Composite logo onto base image
+        const compositeBuffer = await compositeLogoOntoBase(
           finalBaseImageUrl,
           contact.logo_url,
-          targetX,
-          targetY,
-          targetWidth,
-          targetHeight
+          destCorners
         );
 
-        // Upload to storage
+        console.log(`[${contact.email}] Composite generated, uploading...`);
+
+        // Upload to Supabase Storage
         const fileName = `${contact.id}-${Date.now()}.png`;
         const { error: uploadError } = await supabaseClient
           .storage
@@ -207,7 +251,9 @@ const handler = async (req: Request): Promise<Response> => {
           .from("logos")
           .getPublicUrl(`composites/${fileName}`);
 
-        // Update contact
+        console.log(`[${contact.email}] Uploaded: ${urlData.publicUrl}`);
+
+        // Update contact with composite_image_url
         const { error: updateError } = await supabaseClient
           .from("contacts")
           .update({ composite_image_url: urlData.publicUrl })
@@ -215,15 +261,20 @@ const handler = async (req: Request): Promise<Response> => {
 
         if (updateError) throw updateError;
 
-        console.log(`[${contact.email}] ✅ Success: ${urlData.publicUrl}`);
+        console.log(`[${contact.email}] ✅ SUCCESS`);
         successCount++;
 
       } catch (error: any) {
-        console.error(`[${contact.email}] ❌ Error:`, error.message);
+        console.error(`[${contact.email}] ❌ ERROR:`, error.message);
         failCount++;
         errors.push(`${contact.email}: ${error.message}`);
       }
     }
+
+    console.log("\n=== Summary ===");
+    console.log(`Total processed: ${successCount + failCount}`);
+    console.log(`Successful: ${successCount}`);
+    console.log(`Failed: ${failCount}`);
 
     return new Response(
       JSON.stringify({
@@ -237,7 +288,7 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
   } catch (error: any) {
-    console.error("Error in generate-composite-images:", error);
+    console.error("❌ FATAL ERROR:", error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
