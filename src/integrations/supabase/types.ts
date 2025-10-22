@@ -109,6 +109,57 @@ export type Database = {
           },
         ]
       }
+      smtp_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_tested_at: string | null
+          smtp_from_email: string
+          smtp_from_name: string
+          smtp_host: string
+          smtp_password: string
+          smtp_port: number
+          smtp_username: string
+          test_status: string | null
+          updated_at: string
+          use_tls: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_tested_at?: string | null
+          smtp_from_email: string
+          smtp_from_name: string
+          smtp_host: string
+          smtp_password: string
+          smtp_port: number
+          smtp_username: string
+          test_status?: string | null
+          updated_at?: string
+          use_tls?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_tested_at?: string | null
+          smtp_from_email?: string
+          smtp_from_name?: string
+          smtp_host?: string
+          smtp_password?: string
+          smtp_port?: number
+          smtp_username?: string
+          test_status?: string | null
+          updated_at?: string
+          use_tls?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

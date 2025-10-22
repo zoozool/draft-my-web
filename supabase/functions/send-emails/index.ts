@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -37,6 +38,42 @@ const handler = async (req: Request): Promise<Response> => {
 
     const body = await req.json().catch(() => ({}));
     const { campaignId }: SendEmailsRequest = body || {};
+
+    // Get user SMTP settings if available
+    let smtpSettings = null;
+    let smtpClient = null;
+    
+    const { data: allCampaigns } = await supabaseClient
+      .from("campaigns")
+      .select("user_id")
+      .limit(1);
+    
+    if (allCampaigns && allCampaigns.length > 0) {
+      const { data: settings } = await supabaseClient
+        .from("smtp_settings")
+        .select("*")
+        .eq("user_id", allCampaigns[0].user_id)
+        .eq("is_active", true)
+        .maybeSingle();
+      
+      if (settings) {
+        smtpSettings = settings;
+        console.log("Using SMTP settings for user:", allCampaigns[0].user_id);
+        
+        // Initialize SMTP client
+        smtpClient = new SMTPClient({
+          connection: {
+            hostname: settings.smtp_host,
+            port: settings.smtp_port,
+            tls: settings.use_tls,
+            auth: {
+              username: settings.smtp_username,
+              password: settings.smtp_password,
+            },
+          },
+        });
+      }
+    }
 
     // If no campaignId provided, find all campaigns that need processing
     let campaignIds: string[] = [];
@@ -121,13 +158,39 @@ const handler = async (req: Request): Promise<Response> => {
           console.log(`[${contact.email}] Subject: ${campaign.subject}`);
           console.log(`[${contact.email}] Body preview: ${personalizedBody.substring(0, 100)}...`);
 
-          // Send email using Resend
-          const { data, error } = await resend.emails.send({
-            from: "Campaign <onboarding@resend.dev>",
-            to: [contact.email],
-            subject: campaign.subject,
-            html: personalizedBody,
-          });
+          let sendError = null;
+          let sendData = null;
+
+          // Send email using SMTP or Resend
+          if (smtpClient && smtpSettings) {
+            try {
+              console.log(`[${contact.email}] Sending via SMTP`);
+              await smtpClient.send({
+                from: `${smtpSettings.smtp_from_name} <${smtpSettings.smtp_from_email}>`,
+                to: contact.email,
+                subject: campaign.subject,
+                content: personalizedBody,
+                html: personalizedBody,
+              });
+              sendData = { id: "smtp-" + Date.now() };
+            } catch (err: any) {
+              sendError = err;
+            }
+          } else {
+            // Fallback to Resend
+            console.log(`[${contact.email}] Sending via Resend`);
+            const result = await resend.emails.send({
+              from: "Campaign <onboarding@resend.dev>",
+              to: [contact.email],
+              subject: campaign.subject,
+              html: personalizedBody,
+            });
+            sendData = result.data;
+            sendError = result.error;
+          }
+
+          const error = sendError;
+          const data = sendData;
 
           if (error) {
             console.error(`[${contact.email}] ❌ FAILED - Resend API Error:`, JSON.stringify(error, null, 2));

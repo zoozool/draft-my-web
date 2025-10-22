@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity } from "lucide-react";
+import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity, Settings } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -102,6 +102,12 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Campaign Management System</p>
           </div>
           <div className="flex gap-2">
+            <Link to="/smtp-settings">
+              <Button variant="outline">
+                <Settings className="mr-2 h-4 w-4" />
+                SMTP Settings
+              </Button>
+            </Link>
             <Link to="/campaigns/new">
               <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity">
                 <Plus className="mr-2 h-4 w-4" />
