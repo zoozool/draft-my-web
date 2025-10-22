@@ -3,8 +3,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2 } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -26,6 +37,7 @@ const CampaignDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -125,6 +137,43 @@ const CampaignDetail = () => {
       });
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (!campaign) return;
+    
+    setIsDeleting(true);
+    try {
+      // Delete all contacts first
+      const { error: contactsError } = await supabase
+        .from("contacts")
+        .delete()
+        .eq("campaign_id", campaign.id);
+
+      if (contactsError) throw contactsError;
+
+      // Delete the campaign
+      const { error } = await supabase
+        .from("campaigns")
+        .delete()
+        .eq("id", campaign.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Campaign deleted",
+        description: "Campaign and all contacts have been deleted",
+      });
+
+      navigate("/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsDeleting(false);
     }
   };
 
@@ -274,6 +323,31 @@ const CampaignDetail = () => {
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive"
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete the campaign "{campaign.name}" and all {campaign.total_contacts} contacts. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteCampaign} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    {isDeleting ? "Deleting..." : "Delete Campaign"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </header>
