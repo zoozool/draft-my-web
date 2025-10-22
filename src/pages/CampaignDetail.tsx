@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -51,6 +51,7 @@ const CampaignDetail = () => {
   const [isStarting, setIsStarting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editSubject, setEditSubject] = useState("");
@@ -229,6 +230,50 @@ const CampaignDetail = () => {
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRegenerateComposites = async () => {
+    if (!campaign) return;
+    
+    setIsRegenerating(true);
+    try {
+      // First, clear all composite_image_url for this campaign
+      const { error: clearError } = await supabase
+        .from("contacts")
+        .update({ composite_image_url: null })
+        .eq("campaign_id", campaign.id)
+        .not("logo_url", "is", null);
+
+      if (clearError) throw clearError;
+
+      toast({
+        title: "Cleared existing composites",
+        description: "Regenerating images...",
+      });
+
+      // Then regenerate
+      const { data, error } = await supabase.functions.invoke("generate-composite-images", {
+        body: { campaignId: campaign.id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Composites regenerated",
+        description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
+      });
+
+      // Refresh campaign data
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to regenerate composites",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -712,7 +757,18 @@ const CampaignDetail = () => {
         {contacts.some(c => c.composite_image_url) && (
           <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
             <CardHeader>
-              <CardTitle>Generated Composite Images</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Generated Composite Images</CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleRegenerateComposites}
+                  disabled={isRegenerating}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {isRegenerating ? "Regenerating..." : "Regenerate All"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
