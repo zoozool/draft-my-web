@@ -105,7 +105,9 @@ const handler = async (req: Request): Promise<Response> => {
           personalizedBody = personalizedBody.replace(/\{\{company\}\}/g, contact.company || "");
           personalizedBody = personalizedBody.replace(/\{\{email\}\}/g, contact.email);
 
-          console.log(`Sending email to: ${contact.email}`);
+          console.log(`[${contact.email}] Starting email send process...`);
+          console.log(`[${contact.email}] Subject: ${campaign.subject}`);
+          console.log(`[${contact.email}] Body preview: ${personalizedBody.substring(0, 100)}...`);
 
           // Send email using Resend
           const { data, error } = await resend.emails.send({
@@ -116,33 +118,56 @@ const handler = async (req: Request): Promise<Response> => {
           });
 
           if (error) {
-            console.error(`Failed to send email to ${contact.email}:`, error);
+            console.error(`[${contact.email}] ❌ FAILED - Resend API Error:`, JSON.stringify(error, null, 2));
+            console.error(`[${contact.email}] Error name: ${error.name}`);
+            console.error(`[${contact.email}] Error message: ${error.message}`);
             failedCount++;
             
             // Update contact status to failed
-            await supabaseClient
+            const updateResult = await supabaseClient
               .from("contacts")
-              .update({ status: "failed" })
+              .update({ 
+                status: "failed",
+                error_message: error.message || JSON.stringify(error)
+              })
               .eq("id", contact.id);
+            
+            if (updateResult.error) {
+              console.error(`[${contact.email}] Failed to update contact status:`, updateResult.error);
+            }
           } else {
-            console.log(`Email sent successfully to ${contact.email}`);
+            console.log(`[${contact.email}] ✅ SUCCESS - Email sent! Resend ID: ${data?.id}`);
             sentCount++;
             
             // Update contact status to sent
-            await supabaseClient
+            const updateResult = await supabaseClient
               .from("contacts")
-              .update({ status: "sent" })
+              .update({ status: "sent", sent_at: new Date().toISOString() })
               .eq("id", contact.id);
+            
+            if (updateResult.error) {
+              console.error(`[${contact.email}] Failed to update contact status:`, updateResult.error);
+            }
           }
-        } catch (error) {
-          console.error(`Error processing contact ${contact.email}:`, error);
+        } catch (error: any) {
+          console.error(`[${contact.email}] ❌ EXCEPTION - Unexpected error:`, error);
+          console.error(`[${contact.email}] Error type: ${typeof error}`);
+          console.error(`[${contact.email}] Error details:`, JSON.stringify(error, null, 2));
+          console.error(`[${contact.email}] Stack trace:`, error.stack);
           failedCount++;
           
           // Update contact status to failed
-          await supabaseClient
+          const updateResult = await supabaseClient
             .from("contacts")
-            .update({ status: "failed" })
+            .update({ 
+              status: "failed",
+              error_message: error.message || String(error)
+            })
             .eq("id", contact.id);
+          
+          if (updateResult.error) {
+            console.error(`[${contact.email}] Failed to update contact status:`, updateResult.error);
+          }
         }
       }
 
