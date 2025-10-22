@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -16,6 +16,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
@@ -46,6 +55,15 @@ const CampaignDetail = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newContact, setNewContact] = useState({
+    email: "",
+    first_name: "",
+    last_name: "",
+    company: "",
+    logo_url: "",
+  });
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -258,6 +276,114 @@ const CampaignDetail = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAddContact = async () => {
+    if (!campaign || !newContact.email) {
+      toast({
+        title: "Email required",
+        description: "Please enter an email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .insert({
+          campaign_id: campaign.id,
+          email: newContact.email,
+          first_name: newContact.first_name || null,
+          last_name: newContact.last_name || null,
+          company: newContact.company || null,
+          logo_url: newContact.logo_url || null,
+          status: "pending",
+        });
+
+      if (error) throw error;
+
+      // Update campaign counts
+      const { error: updateError } = await supabase
+        .from("campaigns")
+        .update({
+          total_contacts: campaign.total_contacts + 1,
+          pending_count: campaign.pending_count + 1,
+        })
+        .eq("id", campaign.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Contact added",
+        description: "New contact has been added to the campaign",
+      });
+
+      setIsAddDialogOpen(false);
+      setNewContact({
+        email: "",
+        first_name: "",
+        last_name: "",
+        company: "",
+        logo_url: "",
+      });
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to add contact",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleDeleteContact = async (contactId: string, contactStatus: string) => {
+    if (!campaign) return;
+
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .delete()
+        .eq("id", contactId);
+
+      if (error) throw error;
+
+      // Update campaign counts based on contact status
+      const updates: any = {
+        total_contacts: campaign.total_contacts - 1,
+      };
+
+      if (contactStatus === "pending") {
+        updates.pending_count = campaign.pending_count - 1;
+      } else if (contactStatus === "sent") {
+        updates.sent_count = campaign.sent_count - 1;
+      } else if (contactStatus === "failed") {
+        updates.failed_count = campaign.failed_count - 1;
+      }
+
+      const { error: updateError } = await supabase
+        .from("campaigns")
+        .update(updates)
+        .eq("id", campaign.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Contact deleted",
+        description: "Contact has been removed from the campaign",
+      });
+
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete contact",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -585,7 +711,88 @@ const CampaignDetail = () => {
         {/* Email List */}
         <Card className="shadow-[var(--shadow-card)] border-border/50">
           <CardHeader>
-            <CardTitle>Email List</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Email List</CardTitle>
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Add Contact
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Contact</DialogTitle>
+                    <DialogDescription>
+                      Manually add a contact to this campaign
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div>
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={newContact.email}
+                        onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+                        placeholder="contact@example.com"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="first_name">First Name</Label>
+                        <Input
+                          id="first_name"
+                          value={newContact.first_name}
+                          onChange={(e) => setNewContact({ ...newContact, first_name: e.target.value })}
+                          placeholder="John"
+                          className="mt-2"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="last_name">Last Name</Label>
+                        <Input
+                          id="last_name"
+                          value={newContact.last_name}
+                          onChange={(e) => setNewContact({ ...newContact, last_name: e.target.value })}
+                          placeholder="Doe"
+                          className="mt-2"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="company">Company</Label>
+                      <Input
+                        id="company"
+                        value={newContact.company}
+                        onChange={(e) => setNewContact({ ...newContact, company: e.target.value })}
+                        placeholder="Company Name"
+                        className="mt-2"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="logo_url">Logo URL</Label>
+                      <Input
+                        id="logo_url"
+                        value={newContact.logo_url}
+                        onChange={(e) => setNewContact({ ...newContact, logo_url: e.target.value })}
+                        placeholder="https://example.com/logo.png"
+                        className="mt-2"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isAdding}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddContact} disabled={isAdding}>
+                      {isAdding ? "Adding..." : "Add Contact"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -596,12 +803,13 @@ const CampaignDetail = () => {
                   <TableHead>Contact</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Sent At</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {contacts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                       No contacts found
                     </TableCell>
                   </TableRow>
@@ -621,6 +829,16 @@ const CampaignDetail = () => {
                       <TableCell className="text-muted-foreground">{contact.email}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {contact.sent_at ? new Date(contact.sent_at).toLocaleString() : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteContact(contact.id, contact.status)}
+                          className="h-8 w-8"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
