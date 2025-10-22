@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload, Pencil } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -67,6 +67,16 @@ const CampaignDetail = () => {
   });
   const [isUploadingBase, setIsUploadingBase] = useState(false);
   const [baseImageFile, setBaseImageFile] = useState<File | null>(null);
+  const [isEditContactOpen, setIsEditContactOpen] = useState(false);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editingContact, setEditingContact] = useState<any>(null);
+  const [editContactForm, setEditContactForm] = useState({
+    email: "",
+    first_name: "",
+    last_name: "",
+    company: "",
+    logo_url: "",
+  });
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -480,6 +490,55 @@ const CampaignDetail = () => {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  const handleEditContactClick = (contact: any) => {
+    setEditingContact(contact);
+    setEditContactForm({
+      email: contact.email,
+      first_name: contact.first_name || "",
+      last_name: contact.last_name || "",
+      company: contact.company || "",
+      logo_url: contact.logo_url || "",
+    });
+    setIsEditContactOpen(true);
+  };
+
+  const handleSaveEditContact = async () => {
+    if (!editingContact) return;
+
+    setIsEditingContact(true);
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .update({
+          email: editContactForm.email,
+          first_name: editContactForm.first_name || null,
+          last_name: editContactForm.last_name || null,
+          company: editContactForm.company || null,
+          logo_url: editContactForm.logo_url || null,
+        })
+        .eq("id", editingContact.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Contact updated",
+        description: "Contact details have been updated successfully",
+      });
+
+      setIsEditContactOpen(false);
+      setEditingContact(null);
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to update contact",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditingContact(false);
     }
   };
 
@@ -983,7 +1042,7 @@ const CampaignDetail = () => {
                   <TableHead>Contact</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Sent At</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1011,14 +1070,24 @@ const CampaignDetail = () => {
                         {contact.sent_at ? new Date(contact.sent_at).toLocaleString() : "-"}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteContact(contact.id, contact.status)}
-                          className="h-8 w-8"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditContactClick(contact)}
+                            className="h-8 w-8"
+                          >
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteContact(contact.id, contact.status)}
+                            className="h-8 w-8"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -1027,6 +1096,81 @@ const CampaignDetail = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Edit Contact Dialog */}
+        <Dialog open={isEditContactOpen} onOpenChange={setIsEditContactOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Contact</DialogTitle>
+              <DialogDescription>
+                Update contact information
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="edit-email">Email *</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editContactForm.email}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, email: e.target.value })}
+                  placeholder="contact@example.com"
+                  className="mt-2"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-first-name">First Name</Label>
+                  <Input
+                    id="edit-first-name"
+                    value={editContactForm.first_name}
+                    onChange={(e) => setEditContactForm({ ...editContactForm, first_name: e.target.value })}
+                    placeholder="John"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-last-name">Last Name</Label>
+                  <Input
+                    id="edit-last-name"
+                    value={editContactForm.last_name}
+                    onChange={(e) => setEditContactForm({ ...editContactForm, last_name: e.target.value })}
+                    placeholder="Doe"
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="edit-company">Company</Label>
+                <Input
+                  id="edit-company"
+                  value={editContactForm.company}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, company: e.target.value })}
+                  placeholder="Company Name"
+                  className="mt-2"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-logo-url">Logo URL</Label>
+                <Input
+                  id="edit-logo-url"
+                  value={editContactForm.logo_url}
+                  onChange={(e) => setEditContactForm({ ...editContactForm, logo_url: e.target.value })}
+                  placeholder="https://example.com/logo.png"
+                  className="mt-2"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditContactOpen(false)} disabled={isEditingContact}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEditContact} disabled={isEditingContact}>
+                {isEditingContact ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
