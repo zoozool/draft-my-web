@@ -1,9 +1,93 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+// Helper function to send email via SMTP
+async function sendViaSMTP(
+  settings: any,
+  to: string,
+  subject: string,
+  html: string
+) {
+  const conn = await Deno.connect({
+    hostname: settings.smtp_host,
+    port: settings.smtp_port,
+  });
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const buffer = new Uint8Array(4096);
+
+  try {
+    // Read greeting
+    await conn.read(buffer);
+
+    // Send EHLO
+    await conn.write(encoder.encode(`EHLO ${settings.smtp_host}\r\n`));
+    await conn.read(buffer);
+
+    let activeConn: Deno.TcpConn | Deno.TlsConn = conn;
+
+    // Handle TLS
+    if (settings.use_tls && settings.smtp_port !== 465) {
+      await conn.write(encoder.encode("STARTTLS\r\n"));
+      await conn.read(buffer);
+      
+      const tlsConn = await Deno.startTls(conn, { hostname: settings.smtp_host });
+      activeConn = tlsConn;
+      
+      await tlsConn.write(encoder.encode(`EHLO ${settings.smtp_host}\r\n`));
+      await tlsConn.read(buffer);
+    }
+
+    // AUTH LOGIN
+    await activeConn.write(encoder.encode("AUTH LOGIN\r\n"));
+    await activeConn.read(buffer);
+
+    await activeConn.write(encoder.encode(`${btoa(settings.smtp_username)}\r\n`));
+    await activeConn.read(buffer);
+
+    await activeConn.write(encoder.encode(`${btoa(settings.smtp_password)}\r\n`));
+    await activeConn.read(buffer);
+
+    // MAIL FROM
+    await activeConn.write(encoder.encode(`MAIL FROM:<${settings.smtp_from_email}>\r\n`));
+    await activeConn.read(buffer);
+
+    // RCPT TO
+    await activeConn.write(encoder.encode(`RCPT TO:<${to}>\r\n`));
+    await activeConn.read(buffer);
+
+    // DATA
+    await activeConn.write(encoder.encode("DATA\r\n"));
+    await activeConn.read(buffer);
+
+    // Email content
+    const emailContent = [
+      `From: ${settings.smtp_from_name} <${settings.smtp_from_email}>`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      html,
+      ".",
+      ""
+    ].join("\r\n");
+
+    await activeConn.write(encoder.encode(emailContent));
+    await activeConn.read(buffer);
+
+    // QUIT
+    await activeConn.write(encoder.encode("QUIT\r\n"));
+    activeConn.close();
+  } catch (error) {
+    conn.close();
+    throw error;
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +125,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Get user SMTP settings if available
     let smtpSettings = null;
-    let smtpClient = null;
     
     const { data: allCampaigns } = await supabaseClient
       .from("campaigns")
@@ -59,19 +142,6 @@ const handler = async (req: Request): Promise<Response> => {
       if (settings) {
         smtpSettings = settings;
         console.log("Using SMTP settings for user:", allCampaigns[0].user_id);
-        
-        // Initialize SMTP client
-        smtpClient = new SMTPClient({
-          connection: {
-            hostname: settings.smtp_host,
-            port: settings.smtp_port,
-            tls: settings.use_tls,
-            auth: {
-              username: settings.smtp_username,
-              password: settings.smtp_password,
-            },
-          },
-        });
       }
     }
 
@@ -162,19 +232,23 @@ const handler = async (req: Request): Promise<Response> => {
           let sendData = null;
 
           // Send email using SMTP or Resend
-          if (smtpClient && smtpSettings) {
+          if (smtpSettings) {
             try {
-              console.log(`[${contact.email}] Sending via SMTP`);
-              await smtpClient.send({
-                from: `${smtpSettings.smtp_from_name} <${smtpSettings.smtp_from_email}>`,
-                to: contact.email,
-                subject: campaign.subject,
-                content: personalizedBody,
-                html: personalizedBody,
-              });
+              console.log(`[${contact.email}] Sending via SMTP to ${smtpSettings.smtp_host}`);
+              
+              // Use native SMTP sending
+              await sendViaSMTP(
+                smtpSettings,
+                contact.email,
+                campaign.subject,
+                personalizedBody
+              );
+              
               sendData = { id: "smtp-" + Date.now() };
+              console.log(`[${contact.email}] ✅ SMTP send successful`);
             } catch (err: any) {
-              sendError = err;
+              console.error(`[${contact.email}] ❌ SMTP send failed:`, err);
+              sendError = { message: err.message };
             }
           } else {
             // Fallback to Resend
@@ -193,11 +267,11 @@ const handler = async (req: Request): Promise<Response> => {
           const data = sendData;
 
           if (error) {
-            console.error(`[${contact.email}] ❌ FAILED - Resend API Error:`, JSON.stringify(error, null, 2));
-            console.error(`[${contact.email}] Error name: ${error.name}`);
+            console.error(`[${contact.email}] ❌ FAILED - Email Send Error:`, JSON.stringify(error, null, 2));
+            console.error(`[${contact.email}] Error name: ${(error as any).name ?? "unknown"}`);
             console.error(`[${contact.email}] Error message: ${error.message}`);
             console.error(`[${contact.email}] Error statusCode: ${(error as any).statusCode ?? "unknown"}`);
-            console.error(`[${contact.email}] Hint: Verify RESEND_API_KEY and sending domain in Resend dashboard`);
+            console.error(`[${contact.email}] Hint: Verify email configuration and credentials`);
             failedCount++;
             
             // Update contact status to failed

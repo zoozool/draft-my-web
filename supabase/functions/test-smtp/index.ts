@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,7 +34,7 @@ const handler = async (req: Request): Promise<Response> => {
           error: "Missing required SMTP configuration fields" 
         }),
         {
-          status: 400,
+          status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         }
       );
@@ -43,29 +42,80 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Testing SMTP connection to ${body.smtp_host}:${body.smtp_port}`);
 
-    // Create SMTP client
-    const client = new SMTPClient({
-      connection: {
+    // Test SMTP connection using raw TCP/TLS
+    try {
+      const conn = await Deno.connect({
         hostname: body.smtp_host,
         port: body.smtp_port,
-        tls: body.use_tls,
-        auth: {
-          username: body.smtp_username,
-          password: body.smtp_password,
-        },
-      },
-    });
-
-    // Test connection by sending a test email to the from address
-    try {
-      await client.send({
-        from: `${body.smtp_from_name} <${body.smtp_from_email}>`,
-        to: body.smtp_from_email,
-        subject: "SMTP Connection Test",
-        content: "This is a test email to verify your SMTP configuration.",
-        html: "<p>This is a test email to verify your SMTP configuration.</p>",
       });
-      console.log("✅ SMTP connection successful");
+
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      // Read initial greeting
+      const buffer = new Uint8Array(1024);
+      await conn.read(buffer);
+      const greeting = decoder.decode(buffer);
+      console.log("Server greeting:", greeting.substring(0, 100));
+
+      if (!greeting.startsWith("220")) {
+        throw new Error("Invalid SMTP greeting");
+      }
+
+      // Send EHLO
+      await conn.write(encoder.encode("EHLO test.local\r\n"));
+      await conn.read(buffer);
+      const ehloResponse = decoder.decode(buffer);
+      console.log("EHLO response:", ehloResponse.substring(0, 100));
+
+      if (body.use_tls && body.smtp_port !== 465) {
+        // Send STARTTLS
+        await conn.write(encoder.encode("STARTTLS\r\n"));
+        await conn.read(buffer);
+        const starttlsResponse = decoder.decode(buffer);
+        console.log("STARTTLS response:", starttlsResponse.substring(0, 100));
+
+        if (!starttlsResponse.startsWith("220")) {
+          throw new Error("STARTTLS failed");
+        }
+
+        // Upgrade to TLS
+        const tlsConn = await Deno.startTls(conn, { hostname: body.smtp_host });
+        
+        // Send EHLO again after TLS
+        await tlsConn.write(encoder.encode("EHLO test.local\r\n"));
+        await tlsConn.read(buffer);
+
+        // Send AUTH LOGIN
+        await tlsConn.write(encoder.encode("AUTH LOGIN\r\n"));
+        await tlsConn.read(buffer);
+
+        // Send username (base64)
+        const username = btoa(body.smtp_username);
+        await tlsConn.write(encoder.encode(`${username}\r\n`));
+        await tlsConn.read(buffer);
+
+        // Send password (base64)
+        const password = btoa(body.smtp_password);
+        await tlsConn.write(encoder.encode(`${password}\r\n`));
+        await tlsConn.read(buffer);
+        const authResponse = decoder.decode(buffer);
+        console.log("Auth response:", authResponse.substring(0, 100));
+
+        if (!authResponse.startsWith("235")) {
+          throw new Error("Authentication failed: " + authResponse.substring(0, 50));
+        }
+
+        // Send QUIT
+        await tlsConn.write(encoder.encode("QUIT\r\n"));
+        tlsConn.close();
+      } else {
+        // Send QUIT for non-TLS or implicit TLS (port 465)
+        await conn.write(encoder.encode("QUIT\r\n"));
+        conn.close();
+      }
+
+      console.log("✅ SMTP connection test successful");
       
       return new Response(
         JSON.stringify({ 
@@ -98,7 +148,7 @@ const handler = async (req: Request): Promise<Response> => {
         error: error.message || "Internal server error" 
       }),
       {
-        status: 500,
+        status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       }
     );
