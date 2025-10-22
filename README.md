@@ -92,11 +92,11 @@ Sends personalized emails to campaign contacts using Resend API.
 
 ## Setting Up Cron Jobs
 
-You can schedule automated email sends using Supabase cron jobs. This requires enabling `pg_cron` and `pg_net` extensions.
+You can schedule automated email sends using Supabase cron jobs. The edge function will automatically find and process all eligible campaigns.
 
 ### Enable Extensions
 
-Run in your Supabase SQL editor:
+Run in your Lovable Cloud backend SQL editor:
 
 ```sql
 -- Enable cron extension
@@ -106,9 +106,9 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 ```
 
-### Schedule Email Sends
+### Schedule Automated Email Sends
 
-Example: Send emails every hour for campaigns with status 'sending':
+The cron job simply triggers the edge function on a schedule. The function handles finding all campaigns with status 'sending' and pending contacts:
 
 ```sql
 SELECT cron.schedule(
@@ -118,13 +118,22 @@ SELECT cron.schedule(
   SELECT
     net.http_post(
       url := 'https://wnmfjueqkrvfnlvfgcvn.supabase.co/functions/v1/send-emails',
-      headers := '{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
-      body := json_build_object('campaignId', id)::text
-    ) AS request_id
-  FROM campaigns
-  WHERE status = 'sending' AND pending_count > 0;
+      headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndubWZqdWVxa3J2Zm5sdmZnY3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NDMzMTEsImV4cCI6MjA3NjIxOTMxMX0.i3MUrWw6CYnxZNQddFuqcwXsqw_cUUOnpwayX2oOdtg"}'::jsonb,
+      body := '{}'::jsonb
+    ) AS request_id;
   $$
 );
+```
+
+**How it works:**
+1. Cron triggers the edge function on schedule (e.g., every hour)
+2. Edge function queries for all campaigns with `status = 'sending'` and `pending_count > 0`
+3. Processes up to 50 contacts per campaign per run
+4. Updates campaign status to 'completed' when all contacts are processed
+
+You can also trigger specific campaigns by passing a `campaignId`:
+```sql
+body := '{"campaignId": "your-campaign-uuid-here"}'::jsonb
 ```
 
 ### Cron Schedule Examples

@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 interface SendEmailsRequest {
-  campaignId: string;
+  campaignId?: string; // Optional - if not provided, processes all eligible campaigns
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -19,118 +19,172 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
-    const { campaignId }: SendEmailsRequest = await req.json();
-    console.log("Starting email send for campaign:", campaignId);
+    const body = await req.json().catch(() => ({}));
+    const { campaignId }: SendEmailsRequest = body || {};
 
-    // Get campaign details
-    const { data: campaign, error: campaignError } = await supabase
-      .from("campaigns")
-      .select("*")
-      .eq("id", campaignId)
-      .single();
+    // If no campaignId provided, find all campaigns that need processing
+    let campaignIds: string[] = [];
+    
+    if (campaignId) {
+      campaignIds = [campaignId];
+      console.log("Processing emails for specific campaign:", campaignId);
+    } else {
+      // Find all campaigns with status 'sending' and pending contacts
+      const { data: eligibleCampaigns, error: campaignsError } = await supabaseClient
+        .from("campaigns")
+        .select("id")
+        .eq("status", "sending")
+        .gt("pending_count", 0);
 
-    if (campaignError || !campaign) {
-      throw new Error("Campaign not found");
+      if (campaignsError) {
+        throw campaignsError;
+      }
+
+      campaignIds = eligibleCampaigns?.map(c => c.id) || [];
+      console.log(`Found ${campaignIds.length} campaigns to process`);
     }
 
-    // Get all pending contacts for this campaign
-    const { data: contacts, error: contactsError } = await supabase
-      .from("contacts")
-      .select("*")
-      .eq("campaign_id", campaignId)
-      .eq("status", "pending");
-
-    if (contactsError) {
-      throw new Error(`Failed to fetch contacts: ${contactsError.message}`);
-    }
-
-    if (!contacts || contacts.length === 0) {
-      console.log("No pending contacts to send emails to");
+    if (campaignIds.length === 0) {
       return new Response(
-        JSON.stringify({ message: "No pending contacts", sent: 0 }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        JSON.stringify({ message: "No campaigns to process", processed: 0 }),
+        { headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log(`Found ${contacts.length} pending contacts`);
+    const results = [];
 
-    let sentCount = 0;
-    let failedCount = 0;
+    for (const currentCampaignId of campaignIds) {
+      console.log("Processing campaign:", currentCampaignId);
 
-    // Send emails to each contact
-    for (const contact of contacts) {
-      try {
-        // Personalize the email body
-        let personalizedBody = campaign.body_template;
-        personalizedBody = personalizedBody.replace(/\{\{first_name\}\}/g, contact.first_name || "");
-        personalizedBody = personalizedBody.replace(/\{\{last_name\}\}/g, contact.last_name || "");
-        personalizedBody = personalizedBody.replace(/\{\{company\}\}/g, contact.company || "");
-        personalizedBody = personalizedBody.replace(/\{\{email\}\}/g, contact.email || "");
+      // Fetch campaign details
+      const { data: campaign, error: campaignError } = await supabaseClient
+        .from("campaigns")
+        .select("*")
+        .eq("id", currentCampaignId)
+        .single();
 
-        // Send email via Resend
-        const emailResponse = await resend.emails.send({
-          from: "Campaign <onboarding@resend.dev>",
-          to: [contact.email],
-          subject: campaign.subject,
-          html: personalizedBody,
-        });
-
-        console.log(`Email sent to ${contact.email}:`, emailResponse);
-
-        // Update contact status to sent
-        await supabase
-          .from("contacts")
-          .update({
-            status: "sent",
-            sent_at: new Date().toISOString(),
-          })
-          .eq("id", contact.id);
-
-        sentCount++;
-      } catch (error: any) {
-        console.error(`Failed to send email to ${contact.email}:`, error);
-
-        // Update contact status to failed
-        await supabase
-          .from("contacts")
-          .update({
-            status: "failed",
-            error_message: error.message,
-          })
-          .eq("id", contact.id);
-
-        failedCount++;
+      if (campaignError) {
+        console.error(`Error fetching campaign ${currentCampaignId}:`, campaignError);
+        results.push({ campaignId: currentCampaignId, error: campaignError.message });
+        continue;
       }
+
+      console.log("Campaign found:", campaign.name);
+
+      // Fetch pending contacts
+      const { data: contacts, error: contactsError } = await supabaseClient
+        .from("contacts")
+        .select("*")
+        .eq("campaign_id", currentCampaignId)
+        .eq("status", "pending")
+        .limit(50); // Process in batches of 50
+
+      if (contactsError) {
+        console.error(`Error fetching contacts for campaign ${currentCampaignId}:`, contactsError);
+        results.push({ campaignId: currentCampaignId, error: contactsError.message });
+        continue;
+      }
+
+      console.log(`Found ${contacts?.length || 0} pending contacts`);
+
+      let sentCount = 0;
+      let failedCount = 0;
+
+      // Send emails to each contact
+      for (const contact of contacts || []) {
+        try {
+          // Personalize email body
+          let personalizedBody = campaign.body_template;
+          personalizedBody = personalizedBody.replace(/\{\{first_name\}\}/g, contact.first_name || "");
+          personalizedBody = personalizedBody.replace(/\{\{last_name\}\}/g, contact.last_name || "");
+          personalizedBody = personalizedBody.replace(/\{\{company\}\}/g, contact.company || "");
+          personalizedBody = personalizedBody.replace(/\{\{email\}\}/g, contact.email);
+
+          console.log(`Sending email to: ${contact.email}`);
+
+          // Send email using Resend
+          const { data, error } = await resend.emails.send({
+            from: "Campaign <onboarding@resend.dev>",
+            to: [contact.email],
+            subject: campaign.subject,
+            html: personalizedBody,
+          });
+
+          if (error) {
+            console.error(`Failed to send email to ${contact.email}:`, error);
+            failedCount++;
+            
+            // Update contact status to failed
+            await supabaseClient
+              .from("contacts")
+              .update({ status: "failed" })
+              .eq("id", contact.id);
+          } else {
+            console.log(`Email sent successfully to ${contact.email}`);
+            sentCount++;
+            
+            // Update contact status to sent
+            await supabaseClient
+              .from("contacts")
+              .update({ status: "sent" })
+              .eq("id", contact.id);
+          }
+        } catch (error) {
+          console.error(`Error processing contact ${contact.email}:`, error);
+          failedCount++;
+          
+          // Update contact status to failed
+          await supabaseClient
+            .from("contacts")
+            .update({ status: "failed" })
+            .eq("id", contact.id);
+        }
+      }
+
+      // Update campaign statistics
+      const newSentCount = (campaign.sent_count || 0) + sentCount;
+      const newFailedCount = (campaign.failed_count || 0) + failedCount;
+      const newPendingCount = Math.max(0, (campaign.pending_count || 0) - (sentCount + failedCount));
+
+      const { error: updateError } = await supabaseClient
+        .from("campaigns")
+        .update({
+          sent_count: newSentCount,
+          failed_count: newFailedCount,
+          pending_count: newPendingCount,
+          status: newPendingCount === 0 ? "completed" : "sending",
+        })
+        .eq("id", currentCampaignId);
+
+      if (updateError) {
+        console.error("Error updating campaign:", updateError);
+        results.push({ campaignId: currentCampaignId, error: updateError.message });
+        continue;
+      }
+
+      console.log(`Campaign ${currentCampaignId} processed: ${sentCount} sent, ${failedCount} failed`);
+
+      results.push({
+        campaignId: currentCampaignId,
+        success: true,
+        sent: sentCount,
+        failed: failedCount,
+        status: newPendingCount === 0 ? "completed" : "sending",
+      });
     }
-
-    // Update campaign counts
-    const { data: updatedCampaign } = await supabase
-      .from("campaigns")
-      .update({
-        sent_count: campaign.sent_count + sentCount,
-        failed_count: campaign.failed_count + failedCount,
-        pending_count: campaign.pending_count - (sentCount + failedCount),
-        status: "completed",
-      })
-      .eq("id", campaignId)
-      .select()
-      .single();
-
-    console.log(`Campaign completed: ${sentCount} sent, ${failedCount} failed`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        sent: sentCount,
-        failed: failedCount,
-        campaign: updatedCampaign,
+        processed: results.length,
+        results: results,
       }),
       {
-        status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       }
     );
