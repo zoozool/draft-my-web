@@ -25,6 +25,36 @@ const CampaignDetail = () => {
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+
+  const handleStartCampaign = async () => {
+    if (!campaign) return;
+    
+    setIsStarting(true);
+    try {
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ status: "sending" })
+        .eq("id", campaign.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Campaign started",
+        description: "Your campaign is now active and will be processed by the cron job",
+      });
+
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to start campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   const handleSendEmails = async () => {
     if (!campaign) return;
@@ -171,11 +201,21 @@ const CampaignDetail = () => {
           <div className="flex gap-2">
             {campaign.status === "draft" && campaign.pending_count > 0 && (
               <Button 
-                onClick={handleSendEmails} 
-                disabled={isSending}
+                onClick={handleStartCampaign} 
+                disabled={isStarting}
               >
                 <Mail className="h-4 w-4 mr-2" />
-                {isSending ? "Sending..." : "Send Emails"}
+                {isStarting ? "Starting..." : "Start Campaign"}
+              </Button>
+            )}
+            {campaign.status === "sending" && campaign.pending_count > 0 && (
+              <Button 
+                onClick={handleSendEmails} 
+                disabled={isSending}
+                variant="secondary"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                {isSending ? "Sending..." : "Send Now"}
               </Button>
             )}
             <Button variant="outline">
