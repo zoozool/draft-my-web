@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -17,8 +17,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { toast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -27,6 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 const CampaignDetail = () => {
   const { id } = useParams();
@@ -39,6 +42,10 @@ const CampaignDetail = () => {
   const [isStarting, setIsStarting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -204,6 +211,53 @@ const CampaignDetail = () => {
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleEditClick = () => {
+    if (campaign) {
+      setEditSubject(campaign.subject);
+      setEditBody(campaign.body_template);
+      setIsEditing(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditSubject("");
+    setEditBody("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!campaign) return;
+    
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ 
+          subject: editSubject,
+          body_template: editBody
+        })
+        .eq("id", campaign.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Campaign updated",
+        description: "Subject and body template have been updated successfully",
+      });
+
+      setIsEditing(false);
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to update campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -440,29 +494,91 @@ const CampaignDetail = () => {
         {/* Campaign Details */}
         <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
           <CardHeader>
-            <CardTitle>Campaign Details</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Campaign Details</CardTitle>
+              {!isEditing && campaign.status === "draft" && (
+                <Button variant="outline" size="sm" onClick={handleEditClick}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Created:</span>
-                <span className="ml-2 font-medium text-foreground">
-                  {new Date(campaign.created_at).toLocaleDateString()}
-                </span>
+            {isEditing ? (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-subject">Email Subject</Label>
+                  <Input
+                    id="edit-subject"
+                    value={editSubject}
+                    onChange={(e) => setEditSubject(e.target.value)}
+                    className="mt-2"
+                    placeholder="Enter email subject..."
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-body">Email Body Template</Label>
+                  <p className="text-sm text-muted-foreground mt-1 mb-2">
+                    Available variables: <code className="text-primary">{'{{company}}'}</code>, <code className="text-primary">{'{{first_name}}'}</code>, <code className="text-primary">{'{{composite_image}}'}</code>, <code className="text-primary">{'{{logo_url}}'}</code>
+                  </p>
+                  <Textarea
+                    id="edit-body"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    className="mt-2 font-mono text-sm"
+                    rows={12}
+                    placeholder="Enter email body HTML..."
+                  />
+                </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleCancelEdit}
+                    disabled={isSaving}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSaveEdit}
+                    disabled={isSaving}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {isSaving ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Status:</span>
-                <span className="ml-2 font-medium text-foreground capitalize">{campaign.status}</span>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Created:</span>
+                  <span className="ml-2 font-medium text-foreground">
+                    {new Date(campaign.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="ml-2 font-medium text-foreground capitalize">{campaign.status}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Subject:</span>
+                  <div className="mt-1 p-3 bg-muted/50 rounded-md font-medium text-foreground">
+                    {campaign.subject}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Email Body Template:</span>
+                  <div className="mt-1 p-3 bg-muted/50 rounded-md font-mono text-xs text-foreground max-h-48 overflow-y-auto">
+                    {campaign.body_template}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total Contacts:</span>
+                  <span className="ml-2 font-medium text-foreground">{campaign.total_contacts}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Subject:</span>
-                <span className="ml-2 font-medium text-foreground">{campaign.subject}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total Contacts:</span>
-                <span className="ml-2 font-medium text-foreground">{campaign.total_contacts}</span>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
