@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       campaigns: {
         Row: {
+          base_image_url: string | null
           body_template: string
           created_at: string | null
           failed_count: number | null
@@ -30,6 +31,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          base_image_url?: string | null
           body_template: string
           created_at?: string | null
           failed_count?: number | null
@@ -44,6 +46,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          base_image_url?: string | null
           body_template?: string
           created_at?: string | null
           failed_count?: number | null

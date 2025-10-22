@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -65,6 +65,8 @@ const CampaignDetail = () => {
     company: "",
     logo_url: "",
   });
+  const [isUploadingBase, setIsUploadingBase] = useState(false);
+  const [baseImageFile, setBaseImageFile] = useState<File | null>(null);
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -204,13 +206,63 @@ const CampaignDetail = () => {
     }
   };
 
+  const handleUploadBaseImage = async () => {
+    if (!campaign || !baseImageFile) return;
+
+    setIsUploadingBase(true);
+    try {
+      const fileName = `base-${campaign.id}-${Date.now()}.${baseImageFile.name.split('.').pop()}`;
+      
+      const { error: uploadError } = await supabase
+        .storage
+        .from("logos")
+        .upload(`base-images/${fileName}`, baseImageFile, {
+          contentType: baseImageFile.type,
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase
+        .storage
+        .from("logos")
+        .getPublicUrl(`base-images/${fileName}`);
+
+      const { error: updateError } = await supabase
+        .from("campaigns")
+        .update({ base_image_url: urlData.publicUrl })
+        .eq("id", campaign.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Base image uploaded",
+        description: "Your base image has been set successfully",
+      });
+
+      setBaseImageFile(null);
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to upload base image",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingBase(false);
+    }
+  };
+
   const handleGenerateComposites = async () => {
     if (!campaign) return;
     
     setIsGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-composite-images", {
-        body: { campaignId: campaign.id },
+        body: { 
+          campaignId: campaign.id,
+          baseImageUrl: campaign.base_image_url || undefined
+        },
       });
 
       if (error) throw error;
@@ -220,7 +272,6 @@ const CampaignDetail = () => {
         description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
       });
 
-      // Refresh campaign data
       fetchCampaignData();
     } catch (error: any) {
       toast({
@@ -238,7 +289,6 @@ const CampaignDetail = () => {
     
     setIsRegenerating(true);
     try {
-      // First, clear all composite_image_url for this campaign
       const { error: clearError } = await supabase
         .from("contacts")
         .update({ composite_image_url: null })
@@ -252,9 +302,11 @@ const CampaignDetail = () => {
         description: "Regenerating images...",
       });
 
-      // Then regenerate
       const { data, error } = await supabase.functions.invoke("generate-composite-images", {
-        body: { campaignId: campaign.id },
+        body: { 
+          campaignId: campaign.id,
+          baseImageUrl: campaign.base_image_url || undefined
+        },
       });
 
       if (error) throw error;
@@ -264,7 +316,6 @@ const CampaignDetail = () => {
         description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
       });
 
-      // Refresh campaign data
       fetchCampaignData();
     } catch (error: any) {
       toast({
@@ -658,6 +709,49 @@ const CampaignDetail = () => {
                   <div className="text-sm text-muted-foreground">Failed</div>
                 </div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Base Image Upload */}
+        <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
+          <CardHeader>
+            <CardTitle>Base Image (bazowy.jpg)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {campaign.base_image_url && (
+              <div className="space-y-2">
+                <Label>Current Base Image</Label>
+                <div className="border border-border/50 rounded-lg overflow-hidden bg-muted">
+                  <img 
+                    src={campaign.base_image_url} 
+                    alt="Base image" 
+                    className="w-full max-h-[300px] object-contain"
+                  />
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="base-image">Upload New Base Image</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="base-image"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setBaseImageFile(e.target.files?.[0] || null)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={handleUploadBaseImage}
+                  disabled={!baseImageFile || isUploadingBase}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploadingBase ? "Uploading..." : "Upload"}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Upload a base image with a white rectangle area where logos will be placed. Coordinates: TL(888,500), TR(1201,493), BR(1198,724), BL(886,726)
+              </p>
             </div>
           </CardContent>
         </Card>
