@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -38,6 +38,7 @@ const CampaignDetail = () => {
   const [isSending, setIsSending] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -177,6 +178,35 @@ const CampaignDetail = () => {
     }
   };
 
+  const handleGenerateComposites = async () => {
+    if (!campaign) return;
+    
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-composite-images", {
+        body: { campaignId: campaign.id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Composite images generated",
+        description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
+      });
+
+      // Refresh campaign data
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to generate composites",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -292,13 +322,23 @@ const CampaignDetail = () => {
           </div>
           <div className="flex gap-2">
             {campaign.status === "draft" && campaign.pending_count > 0 && (
-              <Button 
-                onClick={handleStartCampaign} 
-                disabled={isStarting}
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                {isStarting ? "Starting..." : "Start Campaign"}
-              </Button>
+              <>
+                <Button 
+                  onClick={handleGenerateComposites} 
+                  disabled={isGenerating}
+                  variant="outline"
+                >
+                  <Image className="h-4 w-4 mr-2" />
+                  {isGenerating ? "Generating..." : "Generate Composites"}
+                </Button>
+                <Button 
+                  onClick={handleStartCampaign} 
+                  disabled={isStarting}
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  {isStarting ? "Starting..." : "Start Campaign"}
+                </Button>
+              </>
             )}
             {campaign.status === "active" && campaign.pending_count > 0 && (
               <Button 

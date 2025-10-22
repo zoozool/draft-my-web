@@ -63,6 +63,7 @@ export type Database = {
         Row: {
           campaign_id: string
           company: string | null
+          composite_image_url: string | null
           created_at: string | null
           email: string
           error_message: string | null
@@ -76,6 +77,7 @@ export type Database = {
         Insert: {
           campaign_id: string
           company?: string | null
+          composite_image_url?: string | null
           created_at?: string | null
           email: string
           error_message?: string | null
@@ -89,6 +91,7 @@ export type Database = {
         Update: {
           campaign_id?: string
           company?: string | null
+          composite_image_url?: string | null
           created_at?: string | null
           email?: string
           error_message?: string | null

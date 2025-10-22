@@ -224,8 +224,12 @@ const handler = async (req: Request): Promise<Response> => {
           personalizedBody = personalizedBody.replace(/\{\{company\}\}/gi, contact.company || "");
           personalizedBody = personalizedBody.replace(/\{\{email\}\}/gi, contact.email);
           personalizedBody = personalizedBody.replace(/\{\{contact\}\}/gi, `${contact.first_name || ""} ${contact.last_name || ""}`.trim());
+          
+          // Use composite image if available, fallback to logo URL
+          const imageUrl = contact.composite_image_url || contact.logo_url || "";
+          personalizedBody = personalizedBody.replace(/\{\{composite_image\}\}/gi, imageUrl);
           personalizedBody = personalizedBody.replace(/\{\{logo_url\}\}/gi, contact.logo_url || "");
-          personalizedBody = personalizedBody.replace(/\{\{INLINE_CID\}\}/gi, contact.logo_url || "");
+          personalizedBody = personalizedBody.replace(/\{\{INLINE_CID\}\}/gi, imageUrl);
 
           console.log(`[${contact.email}] Starting email send process...`);
           console.log(`[${contact.email}] Subject: ${campaign.subject}`);
