@@ -19,6 +19,17 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    const envCheck = {
+      hasResendApiKey: Boolean(Deno.env.get("RESEND_API_KEY")),
+      hasSupabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
+      hasServiceRole: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
+    };
+    console.log("send-emails invoked", {
+      method: req.method,
+      at: new Date().toISOString(),
+      envCheck,
+    });
+
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -75,6 +86,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       console.log("Campaign found:", campaign.name);
+      console.log("Email 'from' used:", "Campaign <onboarding@resend.dev>", "Subject:", campaign.subject);
 
       // Fetch pending contacts
       const { data: contacts, error: contactsError } = await supabaseClient
@@ -121,6 +133,8 @@ const handler = async (req: Request): Promise<Response> => {
             console.error(`[${contact.email}] ❌ FAILED - Resend API Error:`, JSON.stringify(error, null, 2));
             console.error(`[${contact.email}] Error name: ${error.name}`);
             console.error(`[${contact.email}] Error message: ${error.message}`);
+            console.error(`[${contact.email}] Error statusCode: ${(error as any).statusCode ?? "unknown"}`);
+            console.error(`[${contact.email}] Hint: Verify RESEND_API_KEY and sending domain in Resend dashboard`);
             failedCount++;
             
             // Update contact status to failed
@@ -215,6 +229,8 @@ const handler = async (req: Request): Promise<Response> => {
     );
   } catch (error: any) {
     console.error("Error in send-emails function:", error);
+    console.error("Error name:", error?.name);
+    console.error("Stack:", error?.stack);
     return new Response(
       JSON.stringify({ error: error.message }),
       {
