@@ -92,9 +92,36 @@ Sends personalized emails to campaign contacts using Resend API.
 
 ## Setting Up Cron Jobs
 
-You can schedule automated email sends using Supabase cron jobs. The edge function will automatically find and process all eligible campaigns.
+You can schedule automated email sends in two ways:
 
-### Enable Extensions
+### Option 1: External Cron (From Your Own Server/VPS)
+
+If you want to run cron jobs from your own server, use this approach:
+
+1. Open crontab editor on your server:
+```bash
+crontab -e
+```
+
+2. Add this line (example runs every minute):
+```bash
+* * * * * curl -s -X POST "https://wnmfjueqkrvfnlvfgcvn.supabase.co/functions/v1/send-emails" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndubWZqdWVxa3J2Zm5sdmZnY3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NDMzMTEsImV4cCI6MjA3NjIxOTMxMX0.i3MUrWw6CYnxZNQddFuqcwXsqw_cUUOnpwayX2oOdtg" \
+  -d '{}' >> /var/log/supabase-cron.log 2>&1
+```
+
+**⚠️ Important Notes:**
+- The URL MUST be `https://wnmfjueqkrvfnlvfgcvn.supabase.co/functions/v1/send-emails` (Supabase edge function URL)
+- Do NOT use your VPS IP or frontend URL (e.g., `http://107.150.1.200:3000`)
+- The Authorization header uses your Supabase anon key (already included above)
+- Logs will be written to `/var/log/supabase-cron.log`
+
+### Option 2: Supabase Built-in Cron (pg_cron)
+
+Use Lovable Cloud's built-in scheduling capabilities:
+
+#### Enable Extensions
 
 Run in your Lovable Cloud backend SQL editor:
 
@@ -106,9 +133,7 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 ```
 
-### Schedule Automated Email Sends
-
-The cron job simply triggers the edge function on a schedule. The function handles finding all campaigns with status 'sending' and pending contacts:
+#### Schedule Automated Email Sends
 
 ```sql
 SELECT cron.schedule(
@@ -147,7 +172,7 @@ body := '{"campaignId": "your-campaign-uuid-here"}'::jsonb
 '0 9 * * 1'       # Every Monday at 9 AM
 ```
 
-### Manage Cron Jobs
+### Manage Cron Jobs (pg_cron only)
 
 ```sql
 -- List all cron jobs
