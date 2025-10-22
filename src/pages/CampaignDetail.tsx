@@ -277,10 +277,20 @@ const CampaignDetail = () => {
 
       if (error) throw error;
 
+      const hasErrors = data.errors && data.errors.length > 0;
+      
       toast({
-        title: "Composite images generated",
-        description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
+        title: hasErrors ? "Composite generation completed with errors" : "Composite images generated",
+        description: hasErrors 
+          ? `${data.successful} succeeded, ${data.failed} failed. Check console for details.`
+          : `Successfully generated ${data.successful} images`,
+        variant: hasErrors ? "destructive" : "default",
       });
+
+      if (hasErrors) {
+        console.error("Composite generation errors:", data.errors);
+        data.errors.forEach((err: string) => console.error("- ", err));
+      }
 
       fetchCampaignData();
     } catch (error: any) {
@@ -321,10 +331,20 @@ const CampaignDetail = () => {
 
       if (error) throw error;
 
+      const hasErrors = data.errors && data.errors.length > 0;
+      
       toast({
-        title: "Composites regenerated",
-        description: `Successfully generated ${data.successful} images, ${data.failed || 0} failed`,
+        title: hasErrors ? "Regeneration completed with errors" : "Composites regenerated",
+        description: hasErrors 
+          ? `${data.successful} succeeded, ${data.failed} failed. Check console for details.`
+          : `Successfully generated ${data.successful} images`,
+        variant: hasErrors ? "destructive" : "default",
       });
+
+      if (hasErrors) {
+        console.error("Composite generation errors:", data.errors);
+        data.errors.forEach((err: string) => console.error("- ", err));
+      }
 
       fetchCampaignData();
     } catch (error: any) {

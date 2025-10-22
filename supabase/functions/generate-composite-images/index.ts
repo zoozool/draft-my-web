@@ -39,62 +39,104 @@ function calculatePerspectiveTransform(
 async function compositeLogoOntoBase(
   baseImageUrl: string,
   logoUrl: string,
-  destCorners: Point[]
+  destCorners: Point[],
+  contactEmail: string
 ): Promise<Uint8Array> {
-  console.log("Downloading base image...");
-  const baseResponse = await fetch(baseImageUrl);
-  if (!baseResponse.ok) throw new Error(`Failed to fetch base image: ${baseResponse.status}`);
-  const baseBuffer = await baseResponse.arrayBuffer();
-  const baseImage = await Image.decode(new Uint8Array(baseBuffer));
+  try {
+    console.log(`[${contactEmail}] Downloading base image from: ${baseImageUrl.substring(0, 100)}...`);
+    const baseResponse = await fetch(baseImageUrl);
+    if (!baseResponse.ok) {
+      throw new Error(`Failed to fetch base image: HTTP ${baseResponse.status} ${baseResponse.statusText}`);
+    }
+    const baseBuffer = await baseResponse.arrayBuffer();
+    console.log(`[${contactEmail}] Base image downloaded: ${baseBuffer.byteLength} bytes`);
+    
+    console.log(`[${contactEmail}] Decoding base image...`);
+    const baseImage = await Image.decode(new Uint8Array(baseBuffer));
+    console.log(`[${contactEmail}] Base image decoded: ${baseImage.width}x${baseImage.height}`);
 
-  console.log("Downloading logo...");
-  const logoResponse = await fetch(logoUrl);
-  if (!logoResponse.ok) throw new Error(`Failed to fetch logo: ${logoResponse.status}`);
-  const logoBuffer = await logoResponse.arrayBuffer();
-  const logoImage = await Image.decode(new Uint8Array(logoBuffer));
+    console.log(`[${contactEmail}] Downloading logo from: ${logoUrl}`);
+    const logoResponse = await fetch(logoUrl);
+    if (!logoResponse.ok) {
+      throw new Error(`Failed to fetch logo: HTTP ${logoResponse.status} ${logoResponse.statusText} - URL: ${logoUrl}`);
+    }
+    const logoBuffer = await logoResponse.arrayBuffer();
+    console.log(`[${contactEmail}] Logo downloaded: ${logoBuffer.byteLength} bytes, Content-Type: ${logoResponse.headers.get('content-type')}`);
+    
+    console.log(`[${contactEmail}] Decoding logo...`);
+    let logoImage: Image;
+    
+    try {
+      logoImage = await Image.decode(new Uint8Array(logoBuffer));
+    } catch (decodeError: any) {
+      // If ImageScript can't decode (e.g., WebP), try converting via browser-compatible formats
+      console.warn(`[${contactEmail}] ImageScript decode failed (${decodeError.message}), attempting fallback conversion...`);
+      
+      // Check if it's a WebP or other unsupported format
+      const contentType = logoResponse.headers.get('content-type') || '';
+      if (contentType.includes('webp') || logoUrl.toLowerCase().endsWith('.webp')) {
+        throw new Error(`WebP format not supported by ImageScript. Please convert logo to PNG or JPEG format. Logo URL: ${logoUrl}`);
+      }
+      
+      throw new Error(`Unsupported image format (${contentType}). Please use PNG, JPEG, or GIF. Logo URL: ${logoUrl}`);
+    }
+    
+    console.log(`[${contactEmail}] Logo decoded: ${logoImage.width}x${logoImage.height}`);
 
-  // Calculate bounding box of the destination quadrilateral
-  const [tl, tr, br, bl] = destCorners;
-  const minX = Math.floor(Math.min(tl.x, tr.x, br.x, bl.x));
-  const maxX = Math.ceil(Math.max(tl.x, tr.x, br.x, bl.x));
-  const minY = Math.floor(Math.min(tl.y, tr.y, br.y, bl.y));
-  const maxY = Math.ceil(Math.max(tl.y, tr.y, br.y, bl.y));
-  
-  const targetWidth = maxX - minX;
-  const targetHeight = maxY - minY;
+    // Calculate bounding box of the destination quadrilateral
+    const [tl, tr, br, bl] = destCorners;
+    const minX = Math.floor(Math.min(tl.x, tr.x, br.x, bl.x));
+    const maxX = Math.ceil(Math.max(tl.x, tr.x, br.x, bl.x));
+    const minY = Math.floor(Math.min(tl.y, tr.y, br.y, bl.y));
+    const maxY = Math.ceil(Math.max(tl.y, tr.y, br.y, bl.y));
+    
+    const targetWidth = maxX - minX;
+    const targetHeight = maxY - minY;
 
-  console.log(`Target area: ${targetWidth}x${targetHeight} at (${minX}, ${minY})`);
+    console.log(`[${contactEmail}] Target area: ${targetWidth}x${targetHeight} at (${minX}, ${minY})`);
 
-  // Resize logo to fit target area while maintaining aspect ratio
-  const logoAspect = logoImage.width / logoImage.height;
-  const targetAspect = targetWidth / targetHeight;
-  
-  let resizedWidth: number, resizedHeight: number;
-  if (logoAspect > targetAspect) {
-    // Logo is wider - fit to width
-    resizedWidth = targetWidth;
-    resizedHeight = Math.floor(targetWidth / logoAspect);
-  } else {
-    // Logo is taller - fit to height
-    resizedHeight = targetHeight;
-    resizedWidth = Math.floor(targetHeight * logoAspect);
+    // Resize logo to fit target area while maintaining aspect ratio
+    const logoAspect = logoImage.width / logoImage.height;
+    const targetAspect = targetWidth / targetHeight;
+    
+    let resizedWidth: number, resizedHeight: number;
+    if (logoAspect > targetAspect) {
+      // Logo is wider - fit to width
+      resizedWidth = targetWidth;
+      resizedHeight = Math.floor(targetWidth / logoAspect);
+    } else {
+      // Logo is taller - fit to height
+      resizedHeight = targetHeight;
+      resizedWidth = Math.floor(targetHeight * logoAspect);
+    }
+
+    console.log(`[${contactEmail}] Resizing logo from ${logoImage.width}x${logoImage.height} to ${resizedWidth}x${resizedHeight}`);
+    const resizedLogo = logoImage.resize(resizedWidth, resizedHeight);
+
+    // Center the resized logo within the target area
+    const offsetX = minX + Math.floor((targetWidth - resizedWidth) / 2);
+    const offsetY = minY + Math.floor((targetHeight - resizedHeight) / 2);
+
+    console.log(`[${contactEmail}] Placing logo at (${offsetX}, ${offsetY})`);
+
+    // Composite the logo onto the base image
+    baseImage.composite(resizedLogo, offsetX, offsetY);
+
+    // Encode as PNG
+    console.log(`[${contactEmail}] Encoding final image...`);
+    const encoded = await baseImage.encode();
+    console.log(`[${contactEmail}] Final image encoded: ${encoded.byteLength} bytes`);
+    
+    return encoded;
+  } catch (error: any) {
+    console.error(`[${contactEmail}] ❌ COMPOSITE ERROR:`, {
+      message: error.message,
+      stack: error.stack,
+      logoUrl,
+      baseImageUrl: baseImageUrl.substring(0, 100)
+    });
+    throw error;
   }
-
-  console.log(`Resizing logo from ${logoImage.width}x${logoImage.height} to ${resizedWidth}x${resizedHeight}`);
-  const resizedLogo = logoImage.resize(resizedWidth, resizedHeight);
-
-  // Center the resized logo within the target area
-  const offsetX = minX + Math.floor((targetWidth - resizedWidth) / 2);
-  const offsetY = minY + Math.floor((targetHeight - resizedHeight) / 2);
-
-  console.log(`Placing logo at (${offsetX}, ${offsetY})`);
-
-  // Composite the logo onto the base image
-  baseImage.composite(resizedLogo, offsetX, offsetY);
-
-  // Encode as PNG
-  console.log("Encoding final image...");
-  return await baseImage.encode();
 }
 
 // Get or create base image with white rectangle
@@ -220,7 +262,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     for (const contact of contacts) {
       try {
-        console.log(`\n[${contact.email}] Starting...`);
+        console.log(`\n[${contact.email}] ===== Starting composite generation =====`);
+        console.log(`[${contact.email}] Contact ID: ${contact.id}`);
         console.log(`[${contact.email}] Logo URL: ${contact.logo_url}`);
         console.log(`[${contact.email}] Company: ${contact.company || 'N/A'}`);
 
@@ -228,10 +271,11 @@ const handler = async (req: Request): Promise<Response> => {
         const compositeBuffer = await compositeLogoOntoBase(
           finalBaseImageUrl,
           contact.logo_url,
-          destCorners
+          destCorners,
+          contact.email
         );
 
-        console.log(`[${contact.email}] Composite generated, uploading...`);
+        console.log(`[${contact.email}] Composite generated successfully, uploading to storage...`);
 
         // Upload to Supabase Storage
         const fileName = `${contact.id}-${Date.now()}.png`;
@@ -243,7 +287,10 @@ const handler = async (req: Request): Promise<Response> => {
             upsert: true
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error(`[${contact.email}] ❌ Upload error:`, uploadError);
+          throw new Error(`Storage upload failed: ${uploadError.message}`);
+        }
 
         // Get public URL
         const { data: urlData } = supabaseClient
@@ -251,7 +298,7 @@ const handler = async (req: Request): Promise<Response> => {
           .from("logos")
           .getPublicUrl(`composites/${fileName}`);
 
-        console.log(`[${contact.email}] Uploaded: ${urlData.publicUrl}`);
+        console.log(`[${contact.email}] Uploaded to: ${urlData.publicUrl}`);
 
         // Update contact with composite_image_url
         const { error: updateError } = await supabaseClient
@@ -259,15 +306,24 @@ const handler = async (req: Request): Promise<Response> => {
           .update({ composite_image_url: urlData.publicUrl })
           .eq("id", contact.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error(`[${contact.email}] ❌ Database update error:`, updateError);
+          throw new Error(`Database update failed: ${updateError.message}`);
+        }
 
-        console.log(`[${contact.email}] ✅ SUCCESS`);
+        console.log(`[${contact.email}] ✅ SUCCESS - Composite generated and saved`);
         successCount++;
 
       } catch (error: any) {
-        console.error(`[${contact.email}] ❌ ERROR:`, error.message);
+        console.error(`[${contact.email}] ❌ FAILED:`, {
+          error: error.message,
+          stack: error.stack,
+          logoUrl: contact.logo_url,
+          company: contact.company
+        });
         failCount++;
-        errors.push(`${contact.email}: ${error.message}`);
+        const errorDetails = `${error.message}${error.cause ? ` (${error.cause})` : ''}`;
+        errors.push(`${contact.email} (${contact.company || 'No company'}): ${errorDetails}`);
       }
     }
 
