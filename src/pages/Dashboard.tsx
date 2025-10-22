@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut } from "lucide-react";
+import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 const Dashboard = () => {
   const { user, loading, signOut } = useAuth();
@@ -55,6 +56,16 @@ const Dashboard = () => {
     pendingEmails: campaigns.reduce((sum, c) => sum + c.pending_count, 0),
     failedEmails: campaigns.reduce((sum, c) => sum + c.failed_count, 0),
   };
+
+  const successRate = stats.totalEmails > 0 
+    ? ((stats.sentEmails / stats.totalEmails) * 100).toFixed(1)
+    : 0;
+
+  const chartData = [
+    { name: "Sent", value: stats.sentEmails, color: "hsl(var(--chart-1))" },
+    { name: "Pending", value: stats.pendingEmails, color: "hsl(var(--chart-2))" },
+    { name: "Failed", value: stats.failedEmails, color: "hsl(var(--chart-5))" },
+  ].filter(item => item.value > 0);
 
   if (loading || loadingData) {
     return (
@@ -107,7 +118,21 @@ const Dashboard = () => {
 
       <main className="container mx-auto px-6 py-8">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <Card className="shadow-[var(--shadow-card)] border-border/50 hover:shadow-[var(--shadow-elegant)] transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Success Rate
+              </CardTitle>
+              <Activity className="h-4 w-4 text-chart-1" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">{successRate}%</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                delivery rate
+              </p>
+            </CardContent>
+          </Card>
           <Card className="shadow-[var(--shadow-card)] border-border/50 hover:shadow-[var(--shadow-elegant)] transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -164,6 +189,94 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Analytics Section */}
+        {stats.totalEmails > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <Card className="shadow-[var(--shadow-card)] border-border/50">
+              <CardHeader>
+                <CardTitle className="text-xl">Email Delivery Status</CardTitle>
+                <CardDescription>Breakdown of email performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-[var(--shadow-card)] border-border/50">
+              <CardHeader>
+                <CardTitle className="text-xl">Performance Metrics</CardTitle>
+                <CardDescription>Overall campaign statistics</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Total Sent</span>
+                    <span className="text-sm font-semibold">{stats.sentEmails}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className="bg-chart-1 h-2 rounded-full transition-all" 
+                      style={{ width: `${stats.totalEmails > 0 ? (stats.sentEmails / stats.totalEmails) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Pending</span>
+                    <span className="text-sm font-semibold">{stats.pendingEmails}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className="bg-chart-2 h-2 rounded-full transition-all" 
+                      style={{ width: `${stats.totalEmails > 0 ? (stats.pendingEmails / stats.totalEmails) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Failed</span>
+                    <span className="text-sm font-semibold">{stats.failedEmails}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className="bg-chart-5 h-2 rounded-full transition-all" 
+                      style={{ width: `${stats.totalEmails > 0 ? (stats.failedEmails / stats.totalEmails) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Success Rate</span>
+                    <span className="text-2xl font-bold text-chart-1">{successRate}%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Recent Campaigns */}
         <Card className="shadow-[var(--shadow-card)] border-border/50">
