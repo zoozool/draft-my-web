@@ -9,11 +9,15 @@ A full-stack email campaign management application built with React, TypeScript,
 ## Features
 
 - 📧 **Email Campaign Management** - Create and manage email campaigns with personalized templates
+- 🖼️ **Composite Image Generation** - Automatically generate personalized images by compositing company logos onto base templates
 - 📊 **Analytics Dashboard** - Real-time tracking of sent, pending, and failed emails
-- 📁 **CSV Import** - Bulk import contacts via CSV upload
+- 📁 **CSV Import** - Bulk import contacts via CSV upload with logo URL support
 - 🎨 **Template Personalization** - Dynamic template variables ({{first_name}}, {{last_name}}, {{company}}, {{email}})
+- 🎯 **Logo Placement Control** - Configurable quadrilateral coordinates for precise logo positioning
 - 🔐 **Secure Authentication** - User authentication with Lovable Cloud Auth
 - 📈 **Campaign Analytics** - Visual charts showing campaign performance and success rates
+- 🔄 **Batch Processing** - Configurable batch size for composite image generation
+- 📸 **Image Gallery** - Browse and download generated composite images
 
 ## Tech Stack
 
@@ -48,8 +52,28 @@ A full-stack email campaign management application built with React, TypeScript,
 - `first_name` (text)
 - `last_name` (text)
 - `company` (text)
+- `logo_url` (text) - URL to company logo
+- `composite_image_url` (text) - URL to generated composite image
 - `status` (text) - 'pending', 'sent', 'failed'
+- `sent_at` (timestamp)
+- `error_message` (text)
 - `created_at` (timestamp)
+
+**smtp_settings**
+- `id` (uuid, primary key)
+- `user_id` (uuid, references auth.users)
+- `smtp_host` (text)
+- `smtp_port` (integer)
+- `smtp_username` (text)
+- `smtp_password` (text)
+- `smtp_from_name` (text)
+- `smtp_from_email` (text)
+- `use_tls` (boolean)
+- `is_active` (boolean)
+- `composite_batch_size` (integer) - Number of images to generate per batch
+- `emails_per_hour_limit` (integer)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ## Edge Functions
 
@@ -89,6 +113,47 @@ Sends personalized emails to campaign contacts using Resend API.
 - Sends emails via Resend API
 - Updates contact and campaign status
 - Tracks sent/failed counts
+
+### generate-composite-images
+**Path**: `supabase/functions/generate-composite-images/index.ts`
+
+Generates composite images by overlaying company logos onto a base template image.
+
+**Request Body**:
+```json
+{
+  "campaignId": "uuid",
+  "baseImageUrl": "optional-url-to-base-image",
+  "limit": 5
+}
+```
+
+**Features**:
+- Processes contacts with logo URLs but no composite images
+- Supports PNG, JPEG, SVG, and WebP formats
+- SVG conversion via resvg WASM rasterization
+- WebP conversion via Lovable AI (Gemini 2.5 Flash)
+- Configurable quadrilateral logo placement with perspective
+- Automatic aspect ratio preservation
+- Batch processing with configurable limits
+- Error handling and skip-on-failure logic
+- Uploads generated images to Supabase Storage
+- Updates contact records with composite image URLs
+
+**Supported Logo Formats**:
+- PNG (native support)
+- JPEG/JPG (native support)
+- SVG (converted to PNG via resvg)
+- WebP (converted to PNG via AI)
+
+**Logo Placement Coordinates**:
+Default quadrilateral coordinates for logo placement:
+- Top-Left: (888, 500)
+- Top-Right: (1201, 493)
+- Bottom-Right: (1198, 724)
+- Bottom-Left: (886, 726)
+
+These can be customized in the campaign detail page UI.
 
 ## Setting Up Cron Jobs
 
@@ -195,7 +260,11 @@ Required secrets (automatically configured in Lovable Cloud):
 - `VITE_SUPABASE_URL` - Supabase project URL
 - `VITE_SUPABASE_PUBLISHABLE_KEY` - Supabase anon key
 - `VITE_SUPABASE_PROJECT_ID` - Project identifier
-- `RESEND_API_KEY` - Resend API key for email sending (add via Lovable Cloud secrets)
+- `SUPABASE_URL` - Supabase URL for edge functions
+- `SUPABASE_ANON_KEY` - Supabase anon key for edge functions
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key for edge functions
+- `RESEND_API_KEY` - Resend API key for email sending
+- `LOVABLE_API_KEY` - Lovable AI API key for image processing (WebP conversion, AI features)
 
 ## Row Level Security (RLS)
 
@@ -203,7 +272,29 @@ All tables have RLS enabled with user-scoped policies:
 
 - Users can only view/manage their own campaigns
 - Users can only access contacts from their campaigns
+- Users can only access their own SMTP settings
 - Automatic user_id enforcement on INSERT operations
+
+## Storage Buckets
+
+**logos** (Public)
+- Stores company logos uploaded or fetched from URLs
+- Stores base template images for composite generation
+- Stores generated composite images in `composites/` folder
+- Stores SVG conversions in `svg-converted/` folder
+
+**csv-uploads** (Private)
+- Stores uploaded CSV files for contact imports
+- User-scoped access via RLS
+
+## Contact List Color Coding
+
+The email list uses color coding to quickly identify contact status:
+
+- 🔴 **Red** - Missing email address
+- 🟠 **Orange** - Missing logo URL
+- 🔵 **Blue** - Missing composite image (logo URL present)
+- ⚪ **Default** - Complete (has email, logo, and composite image)
 
 ## How can I edit this code?
 
