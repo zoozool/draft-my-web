@@ -118,6 +118,7 @@ export type Database = {
       smtp_settings: {
         Row: {
           created_at: string
+          emails_per_hour_limit: number | null
           id: string
           is_active: boolean
           last_tested_at: string | null
@@ -134,6 +135,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          emails_per_hour_limit?: number | null
           id?: string
           is_active?: boolean
           last_tested_at?: string | null
@@ -150,6 +152,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          emails_per_hour_limit?: number | null
           id?: string
           is_active?: boolean
           last_tested_at?: string | null

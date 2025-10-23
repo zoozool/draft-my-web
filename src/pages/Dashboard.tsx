@@ -102,10 +102,10 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">Campaign Management System</p>
           </div>
           <div className="flex gap-2">
-            <Link to="/smtp-settings">
+            <Link to="/settings">
               <Button variant="outline">
                 <Settings className="mr-2 h-4 w-4" />
-                SMTP Settings
+                Settings
               </Button>
             </Link>
             <Link to="/campaigns/new">
