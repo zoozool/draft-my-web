@@ -39,6 +39,15 @@ import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 
 const CampaignDetail = () => {
@@ -79,6 +88,14 @@ const CampaignDetail = () => {
     logo_url: "",
   });
   const [compositeErrors, setCompositeErrors] = useState<string[]>([]);
+  const [compositePage, setCompositePage] = useState(1);
+  const [isEditingCoordinates, setIsEditingCoordinates] = useState(false);
+  const [coordinates, setCoordinates] = useState({
+    topLeft: { x: 888, y: 500 },
+    topRight: { x: 1201, y: 493 },
+    bottomRight: { x: 1198, y: 724 },
+    bottomLeft: { x: 886, y: 726 }
+  });
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -881,8 +898,158 @@ const CampaignDetail = () => {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Upload a base image with a white rectangle area where logos will be placed. Coordinates: TL(888,500), TR(1201,493), BR(1198,724), BL(886,726)
+                Upload a base image with a white rectangle area where logos will be placed.
               </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Logo Placement Coordinates</Label>
+                {!isEditingCoordinates ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditingCoordinates(true)}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Coordinates
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsEditingCoordinates(false);
+                        setCoordinates({
+                          topLeft: { x: 888, y: 500 },
+                          topRight: { x: 1201, y: 493 },
+                          bottomRight: { x: 1198, y: 724 },
+                          bottomLeft: { x: 886, y: 726 }
+                        });
+                      }}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsEditingCoordinates(false);
+                        toast({
+                          title: "Coordinates saved",
+                          description: "New coordinates will be used for composite generation",
+                        });
+                      }}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {isEditingCoordinates ? (
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <Label className="text-xs">Top Left (X, Y)</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="number"
+                        value={coordinates.topLeft.x}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          topLeft: { ...coordinates.topLeft, x: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="X"
+                      />
+                      <Input
+                        type="number"
+                        value={coordinates.topLeft.y}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          topLeft: { ...coordinates.topLeft, y: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="Y"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Top Right (X, Y)</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="number"
+                        value={coordinates.topRight.x}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          topRight: { ...coordinates.topRight, x: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="X"
+                      />
+                      <Input
+                        type="number"
+                        value={coordinates.topRight.y}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          topRight: { ...coordinates.topRight, y: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="Y"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Bottom Left (X, Y)</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="number"
+                        value={coordinates.bottomLeft.x}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          bottomLeft: { ...coordinates.bottomLeft, x: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="X"
+                      />
+                      <Input
+                        type="number"
+                        value={coordinates.bottomLeft.y}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          bottomLeft: { ...coordinates.bottomLeft, y: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="Y"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Bottom Right (X, Y)</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="number"
+                        value={coordinates.bottomRight.x}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          bottomRight: { ...coordinates.bottomRight, x: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="X"
+                      />
+                      <Input
+                        type="number"
+                        value={coordinates.bottomRight.y}
+                        onChange={(e) => setCoordinates({
+                          ...coordinates,
+                          bottomRight: { ...coordinates.bottomRight, y: parseInt(e.target.value) || 0 }
+                        })}
+                        placeholder="Y"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-muted/50 rounded-md text-sm font-mono">
+                  <div>TL: ({coordinates.topLeft.x}, {coordinates.topLeft.y})</div>
+                  <div>TR: ({coordinates.topRight.x}, {coordinates.topRight.y})</div>
+                  <div>BR: ({coordinates.bottomRight.x}, {coordinates.bottomRight.y})</div>
+                  <div>BL: ({coordinates.bottomLeft.x}, {coordinates.bottomLeft.y})</div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1020,7 +1187,12 @@ const CampaignDetail = () => {
           <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Generated Composite Images</CardTitle>
+                <CardTitle>
+                  Generated Composite Images 
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({contacts.filter(c => c.composite_image_url).length} total)
+                  </span>
+                </CardTitle>
                 <div className="flex gap-2">
                   <Button 
                     variant="outline" 
@@ -1043,24 +1215,91 @@ const CampaignDetail = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {contacts
-                  .filter(contact => contact.composite_image_url)
-                  .map((contact) => (
-                    <div key={contact.id} className="space-y-2">
-                      <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted">
-                        <img
-                          src={contact.composite_image_url}
-                          alt={`Composite for ${contact.company || contact.email}`}
-                          className="w-full h-full object-contain"
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {contacts
+                    .filter(contact => contact.composite_image_url)
+                    .slice((compositePage - 1) * 50, compositePage * 50)
+                    .map((contact) => (
+                      <div key={contact.id} className="space-y-2">
+                        <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted">
+                          <img
+                            src={contact.composite_image_url}
+                            alt={`Composite for ${contact.company || contact.email}`}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="text-sm space-y-1">
+                          <p className="font-medium text-foreground">{contact.company || "No company"}</p>
+                          <p className="text-muted-foreground text-xs">{contact.email}</p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                
+                {/* Pagination */}
+                {contacts.filter(c => c.composite_image_url).length > 50 && (
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCompositePage(Math.max(1, compositePage - 1))}
+                          className={compositePage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                         />
-                      </div>
-                      <div className="text-sm space-y-1">
-                        <p className="font-medium text-foreground">{contact.company || "No company"}</p>
-                        <p className="text-muted-foreground text-xs">{contact.email}</p>
-                      </div>
-                    </div>
-                  ))}
+                      </PaginationItem>
+                      
+                      {Array.from({ 
+                        length: Math.ceil(contacts.filter(c => c.composite_image_url).length / 50) 
+                      }).map((_, i) => {
+                        const pageNum = i + 1;
+                        const totalPages = Math.ceil(contacts.filter(c => c.composite_image_url).length / 50);
+                        
+                        // Show first page, last page, current page, and pages around current
+                        if (
+                          pageNum === 1 ||
+                          pageNum === totalPages ||
+                          Math.abs(pageNum - compositePage) <= 1
+                        ) {
+                          return (
+                            <PaginationItem key={pageNum}>
+                              <PaginationLink
+                                onClick={() => setCompositePage(pageNum)}
+                                isActive={compositePage === pageNum}
+                                className="cursor-pointer"
+                              >
+                                {pageNum}
+                              </PaginationLink>
+                            </PaginationItem>
+                          );
+                        } else if (
+                          pageNum === compositePage - 2 ||
+                          pageNum === compositePage + 2
+                        ) {
+                          return (
+                            <PaginationItem key={pageNum}>
+                              <PaginationEllipsis />
+                            </PaginationItem>
+                          );
+                        }
+                        return null;
+                      })}
+                      
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCompositePage(Math.min(
+                            Math.ceil(contacts.filter(c => c.composite_image_url).length / 50), 
+                            compositePage + 1
+                          ))}
+                          className={
+                            compositePage >= Math.ceil(contacts.filter(c => c.composite_image_url).length / 50)
+                              ? "pointer-events-none opacity-50" 
+                              : "cursor-pointer"
+                          }
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
               </div>
             </CardContent>
           </Card>
