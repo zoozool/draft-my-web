@@ -1296,8 +1296,19 @@ const CampaignDetail = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  contacts.map((contact) => (
-                    <TableRow key={contact.id}>
+                  contacts.map((contact) => {
+                    const getRowColor = () => {
+                      if (!contact.email || contact.email.trim() === "") {
+                        return "bg-red-500/10 hover:bg-red-500/20";
+                      }
+                      if (!contact.logo_url || contact.logo_url.trim() === "") {
+                        return "bg-orange-500/10 hover:bg-orange-500/20";
+                      }
+                      return "";
+                    };
+
+                    return (
+                      <TableRow key={contact.id} className={getRowColor()}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {getStatusIcon(contact.status)}
@@ -1332,8 +1343,9 @@ const CampaignDetail = () => {
                           </Button>
                         </div>
                       </TableCell>
-                    </TableRow>
-                  ))
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
