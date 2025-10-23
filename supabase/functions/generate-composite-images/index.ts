@@ -35,6 +35,56 @@ function calculatePerspectiveTransform(
   return [[minX, minY, maxX - minX, maxY - minY]];
 }
 
+// Convert SVG to PNG using Lovable AI
+async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<string> {
+  console.log(`[${contactEmail}] Converting SVG to PNG...`);
+  
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured - needed to convert SVG");
+  }
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-image-preview",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Convert this SVG image to PNG format. Keep the image exactly as it is, don't modify anything. Output a high-quality PNG with transparent background."
+          },
+          {
+            type: "image_url",
+            image_url: { url: svgUrl }
+          }
+        ]
+      }],
+      modalities: ["image", "text"]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to convert SVG: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const pngDataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  
+  if (!pngDataUrl) {
+    throw new Error("No PNG data URL returned from SVG conversion");
+  }
+
+  console.log(`[${contactEmail}] SVG converted to PNG successfully`);
+  return pngDataUrl;
+}
+
 // Composite logo onto base image at specified quadrilateral coordinates
 async function compositeLogoOntoBase(
   baseImageUrl: string,
@@ -55,8 +105,15 @@ async function compositeLogoOntoBase(
     const baseImage = await Image.decode(new Uint8Array(baseBuffer));
     console.log(`[${contactEmail}] Base image decoded: ${baseImage.width}x${baseImage.height}`);
 
-    console.log(`[${contactEmail}] Downloading logo from: ${logoUrl}`);
-    const logoResponse = await fetch(logoUrl);
+    // Check if logo is SVG and convert if needed
+    let processedLogoUrl = logoUrl;
+    if (logoUrl.toLowerCase().endsWith('.svg') || logoUrl.includes('.svg?') || logoUrl.toLowerCase().includes('image/svg')) {
+      console.log(`[${contactEmail}] SVG detected, converting to PNG...`);
+      processedLogoUrl = await convertSvgToPng(logoUrl, contactEmail);
+    }
+
+    console.log(`[${contactEmail}] Downloading logo from: ${processedLogoUrl.substring(0, 100)}...`);
+    const logoResponse = await fetch(processedLogoUrl);
     if (!logoResponse.ok) {
       throw new Error(`Failed to fetch logo: HTTP ${logoResponse.status} ${logoResponse.statusText} - URL: ${logoUrl}`);
     }
@@ -251,16 +308,11 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Filter out contacts with empty or invalid logo URLs
+    // Filter out contacts with empty logo URLs
     const validContacts = contacts.filter(c => {
       const url = c.logo_url?.trim();
       if (!url || url === '') {
         console.log(`[${c.email}] Skipping - empty logo URL`);
-        return false;
-      }
-      // Skip SVG files as they're not supported
-      if (url.toLowerCase().endsWith('.svg') || url.includes('.svg?')) {
-        console.log(`[${c.email}] Skipping - SVG format not supported: ${url}`);
         return false;
       }
       return true;
