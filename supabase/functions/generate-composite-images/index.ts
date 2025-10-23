@@ -45,45 +45,107 @@ async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<st
     throw new Error("LOVABLE_API_KEY not configured - needed to convert SVG");
   }
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-image-preview",
-      messages: [{
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Convert this SVG image to PNG format. Keep the image exactly as it is, don't modify anything. Output a high-quality PNG with transparent background."
-          },
-          {
-            type: "image_url",
-            image_url: { url: svgUrl }
-          }
-        ]
-      }],
-      modalities: ["image", "text"]
-    })
-  });
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Convert this SVG image to PNG format. Keep the image exactly as it is, don't modify anything. Output a high-quality PNG with transparent background."
+            },
+            {
+              type: "image_url",
+              image_url: { url: svgUrl }
+            }
+          ]
+        }],
+        modalities: ["image", "text"]
+      })
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to convert SVG: ${response.status} - ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${contactEmail}] SVG conversion API error:`, errorText);
+      throw new Error(`AI cannot process this SVG file`);
+    }
+
+    const data = await response.json();
+    const pngDataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (!pngDataUrl) {
+      throw new Error("No PNG data URL returned from SVG conversion");
+    }
+
+    console.log(`[${contactEmail}] SVG converted to PNG successfully`);
+    return pngDataUrl;
+  } catch (error: any) {
+    console.error(`[${contactEmail}] SVG conversion failed:`, error.message);
+    throw new Error(`Cannot convert SVG: ${error.message}`);
   }
+}
 
-  const data = await response.json();
-  const pngDataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+// Convert WebP to PNG using Lovable AI
+async function convertWebPToPng(webpUrl: string, contactEmail: string): Promise<string> {
+  console.log(`[${contactEmail}] Converting WebP to PNG...`);
   
-  if (!pngDataUrl) {
-    throw new Error("No PNG data URL returned from SVG conversion");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY not configured - needed to convert WebP");
   }
 
-  console.log(`[${contactEmail}] SVG converted to PNG successfully`);
-  return pngDataUrl;
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Convert this WebP image to PNG format. Keep the image exactly as it is. Output a high-quality PNG."
+            },
+            {
+              type: "image_url",
+              image_url: { url: webpUrl }
+            }
+          ]
+        }],
+        modalities: ["image", "text"]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${contactEmail}] WebP conversion API error:`, errorText);
+      throw new Error(`AI cannot process this WebP file`);
+    }
+
+    const data = await response.json();
+    const pngDataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (!pngDataUrl) {
+      throw new Error("No PNG data URL returned from WebP conversion");
+    }
+
+    console.log(`[${contactEmail}] WebP converted to PNG successfully`);
+    return pngDataUrl;
+  } catch (error: any) {
+    console.error(`[${contactEmail}] WebP conversion failed:`, error.message);
+    throw new Error(`Cannot convert WebP: ${error.message}`);
+  }
 }
 
 // Composite logo onto base image at specified quadrilateral coordinates
@@ -106,11 +168,29 @@ async function compositeLogoOntoBase(
     const baseImage = await Image.decode(new Uint8Array(baseBuffer));
     console.log(`[${contactEmail}] Base image decoded: ${baseImage.width}x${baseImage.height}`);
 
-    // Check if logo is SVG and convert if needed
+    // Check if logo needs conversion
     let processedLogoUrl = logoUrl;
-    if (logoUrl.toLowerCase().endsWith('.svg') || logoUrl.includes('.svg?') || logoUrl.toLowerCase().includes('image/svg')) {
+    const lowerUrl = logoUrl.toLowerCase();
+    
+    // Handle SVG
+    if (lowerUrl.endsWith('.svg') || lowerUrl.includes('.svg?') || lowerUrl.includes('image/svg')) {
       console.log(`[${contactEmail}] SVG detected, converting to PNG...`);
-      processedLogoUrl = await convertSvgToPng(logoUrl, contactEmail);
+      try {
+        processedLogoUrl = await convertSvgToPng(logoUrl, contactEmail);
+      } catch (convError: any) {
+        // If SVG conversion fails, skip this logo
+        throw new Error(`SVG conversion failed: ${convError.message}. Please use PNG or JPEG format.`);
+      }
+    }
+    
+    // Handle WebP
+    if (lowerUrl.endsWith('.webp') || lowerUrl.includes('.webp?')) {
+      console.log(`[${contactEmail}] WebP detected, converting to PNG...`);
+      try {
+        processedLogoUrl = await convertWebPToPng(logoUrl, contactEmail);
+      } catch (convError: any) {
+        throw new Error(`WebP conversion failed: ${convError.message}. Please use PNG or JPEG format.`);
+      }
     }
 
     console.log(`[${contactEmail}] Downloading logo from: ${processedLogoUrl.substring(0, 100)}...`);
@@ -127,16 +207,8 @@ async function compositeLogoOntoBase(
     try {
       logoImage = await Image.decode(new Uint8Array(logoBuffer));
     } catch (decodeError: any) {
-      // If ImageScript can't decode (e.g., WebP), try converting via browser-compatible formats
-      console.warn(`[${contactEmail}] ImageScript decode failed (${decodeError.message}), attempting fallback conversion...`);
-      
-      // Check if it's a WebP or other unsupported format
-      const contentType = logoResponse.headers.get('content-type') || '';
-      if (contentType.includes('webp') || logoUrl.toLowerCase().endsWith('.webp')) {
-        throw new Error(`WebP format not supported by ImageScript. Please convert logo to PNG or JPEG format. Logo URL: ${logoUrl}`);
-      }
-      
-      throw new Error(`Unsupported image format (${contentType}). Please use PNG, JPEG, or GIF. Logo URL: ${logoUrl}`);
+      console.error(`[${contactEmail}] ImageScript decode failed:`, decodeError.message);
+      throw new Error(`Unsupported image format. Please use PNG or JPEG. Logo URL: ${logoUrl}`);
     }
     
     console.log(`[${contactEmail}] Logo decoded: ${logoImage.width}x${logoImage.height}`);
