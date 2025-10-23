@@ -36,8 +36,12 @@ function calculatePerspectiveTransform(
   return [[minX, minY, maxX - minX, maxY - minY]];
 }
 
-// Convert SVG to PNG using Lovable AI
-async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<string> {
+// Convert SVG to PNG using Lovable AI with fallback
+async function convertSvgToPng(
+  svgUrl: string, 
+  contactEmail: string,
+  supabaseClient: any
+): Promise<string> {
   console.log(`[${contactEmail}] Converting SVG to PNG...`);
   
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -45,7 +49,7 @@ async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<st
     throw new Error("LOVABLE_API_KEY not configured - needed to convert SVG");
   }
 
-  try {
+  const tryConversion = async (url: string): Promise<string> => {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -63,7 +67,7 @@ async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<st
             },
             {
               type: "image_url",
-              image_url: { url: svgUrl }
+              image_url: { url }
             }
           ]
         }],
@@ -73,22 +77,64 @@ async function convertSvgToPng(svgUrl: string, contactEmail: string): Promise<st
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[${contactEmail}] SVG conversion API error:`, errorText);
-      throw new Error(`AI cannot process this SVG file`);
+      throw new Error(`AI API error: ${errorText}`);
     }
 
     const data = await response.json();
     const pngDataUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (!pngDataUrl) {
-      throw new Error("No PNG data URL returned from SVG conversion");
+      throw new Error("No PNG data URL returned");
     }
 
-    console.log(`[${contactEmail}] SVG converted to PNG successfully`);
     return pngDataUrl;
-  } catch (error: any) {
-    console.error(`[${contactEmail}] SVG conversion failed:`, error.message);
-    throw new Error(`Cannot convert SVG: ${error.message}`);
+  };
+
+  try {
+    // First attempt with original URL
+    return await tryConversion(svgUrl);
+  } catch (firstError: any) {
+    console.log(`[${contactEmail}] First SVG conversion attempt failed, trying fallback...`);
+    
+    try {
+      // Fallback: Download SVG and rehost to Storage
+      console.log(`[${contactEmail}] Downloading SVG to rehost...`);
+      const svgResponse = await fetch(svgUrl);
+      if (!svgResponse.ok) {
+        throw new Error(`Failed to download SVG: ${svgResponse.status}`);
+      }
+      
+      const svgBlob = await svgResponse.arrayBuffer();
+      const fileName = `svg-rehost/${contactEmail.replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.svg`;
+      
+      console.log(`[${contactEmail}] Uploading SVG to storage...`);
+      const { error: uploadError } = await supabaseClient
+        .storage
+        .from("logos")
+        .upload(fileName, svgBlob, {
+          contentType: "image/svg+xml",
+          upsert: true
+        });
+
+      if (uploadError) {
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
+      }
+
+      const { data: urlData } = supabaseClient
+        .storage
+        .from("logos")
+        .getPublicUrl(fileName);
+
+      console.log(`[${contactEmail}] SVG rehosted to: ${urlData.publicUrl}`);
+      console.log(`[${contactEmail}] Retrying conversion with HTTPS URL...`);
+      
+      // Second attempt with rehosted HTTPS URL
+      return await tryConversion(urlData.publicUrl);
+      
+    } catch (fallbackError: any) {
+      console.error(`[${contactEmail}] Fallback SVG conversion also failed:`, fallbackError.message);
+      throw new Error(`Cannot convert SVG after fallback: ${fallbackError.message}`);
+    }
   }
 }
 
@@ -153,7 +199,8 @@ async function compositeLogoOntoBase(
   baseImageUrl: string,
   logoUrl: string,
   destCorners: Point[],
-  contactEmail: string
+  contactEmail: string,
+  supabaseClient: any
 ): Promise<Uint8Array> {
   try {
     console.log(`[${contactEmail}] Downloading base image from: ${baseImageUrl.substring(0, 100)}...`);
@@ -176,7 +223,7 @@ async function compositeLogoOntoBase(
     if (lowerUrl.endsWith('.svg') || lowerUrl.includes('.svg?') || lowerUrl.includes('image/svg')) {
       console.log(`[${contactEmail}] SVG detected, converting to PNG...`);
       try {
-        processedLogoUrl = await convertSvgToPng(logoUrl, contactEmail);
+        processedLogoUrl = await convertSvgToPng(logoUrl, contactEmail, supabaseClient);
       } catch (convError: any) {
         // If SVG conversion fails, skip this logo
         throw new Error(`SVG conversion failed: ${convError.message}. Please use PNG or JPEG format.`);
@@ -413,7 +460,8 @@ const handler = async (req: Request): Promise<Response> => {
           finalBaseImageUrl,
           contact.logo_url,
           destCorners,
-          contact.email
+          contact.email,
+          supabaseClient
         );
 
         console.log(`[${contact.email}] Composite generated successfully, uploading to storage...`);
