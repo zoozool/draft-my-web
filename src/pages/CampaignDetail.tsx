@@ -1182,7 +1182,7 @@ const CampaignDetail = () => {
           </Card>
         )}
 
-        {/* Composite Images Gallery */}
+        {/* Composite Images Preview */}
         {contacts.some(c => c.composite_image_url) && (
           <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
             <CardHeader>
@@ -1194,6 +1194,12 @@ const CampaignDetail = () => {
                   </span>
                 </CardTitle>
                 <div className="flex gap-2">
+                  <Link to={`/campaigns/${id}/composites`}>
+                    <Button variant="default" size="sm">
+                      <Image className="h-4 w-4 mr-2" />
+                      View Gallery
+                    </Button>
+                  </Link>
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -1215,11 +1221,11 @@ const CampaignDetail = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {contacts
                     .filter(contact => contact.composite_image_url)
-                    .slice((compositePage - 1) * 50, compositePage * 50)
+                    .slice(0, 6)
                     .map((contact) => (
                       <div key={contact.id} className="space-y-2">
                         <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted">
@@ -1236,69 +1242,14 @@ const CampaignDetail = () => {
                       </div>
                     ))}
                 </div>
-                
-                {/* Pagination */}
-                {contacts.filter(c => c.composite_image_url).length > 50 && (
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious 
-                          onClick={() => setCompositePage(Math.max(1, compositePage - 1))}
-                          className={compositePage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                      
-                      {Array.from({ 
-                        length: Math.ceil(contacts.filter(c => c.composite_image_url).length / 50) 
-                      }).map((_, i) => {
-                        const pageNum = i + 1;
-                        const totalPages = Math.ceil(contacts.filter(c => c.composite_image_url).length / 50);
-                        
-                        // Show first page, last page, current page, and pages around current
-                        if (
-                          pageNum === 1 ||
-                          pageNum === totalPages ||
-                          Math.abs(pageNum - compositePage) <= 1
-                        ) {
-                          return (
-                            <PaginationItem key={pageNum}>
-                              <PaginationLink
-                                onClick={() => setCompositePage(pageNum)}
-                                isActive={compositePage === pageNum}
-                                className="cursor-pointer"
-                              >
-                                {pageNum}
-                              </PaginationLink>
-                            </PaginationItem>
-                          );
-                        } else if (
-                          pageNum === compositePage - 2 ||
-                          pageNum === compositePage + 2
-                        ) {
-                          return (
-                            <PaginationItem key={pageNum}>
-                              <PaginationEllipsis />
-                            </PaginationItem>
-                          );
-                        }
-                        return null;
-                      })}
-                      
-                      <PaginationItem>
-                        <PaginationNext 
-                          onClick={() => setCompositePage(Math.min(
-                            Math.ceil(contacts.filter(c => c.composite_image_url).length / 50), 
-                            compositePage + 1
-                          ))}
-                          className={
-                            compositePage >= Math.ceil(contacts.filter(c => c.composite_image_url).length / 50)
-                              ? "pointer-events-none opacity-50" 
-                              : "cursor-pointer"
-                          }
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+                {contacts.filter(c => c.composite_image_url).length > 6 && (
+                  <div className="text-center pt-2">
+                    <Link to={`/campaigns/${id}/composites`}>
+                      <Button variant="outline">
+                        View all {contacts.filter(c => c.composite_image_url).length} images
+                      </Button>
+                    </Link>
+                  </div>
                 )}
               </div>
             </CardContent>
