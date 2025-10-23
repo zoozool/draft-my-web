@@ -783,6 +783,14 @@ const CampaignDetail = () => {
                 {isStarting ? "Resetting..." : "Reset Campaign"}
               </Button>
             )}
+            {contacts.some(c => c.composite_image_url) && (
+              <Link to={`/campaigns/${id}/composites`}>
+                <Button variant="outline">
+                  <Image className="h-4 w-4 mr-2" />
+                  View Gallery
+                </Button>
+              </Link>
+            )}
             <Button variant="outline">
               <Download className="mr-2 h-4 w-4" />
               Export
