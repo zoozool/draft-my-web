@@ -6,7 +6,7 @@ import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
-import LexicalErrorBoundary from '@lexical/react/LexicalErrorBoundary';
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { HeadingNode, QuoteNode } from '@lexical/rich-text';
@@ -347,7 +347,7 @@ export const WysiwygEditor = ({ value, onChange, placeholder, className }: Wysiw
                     {placeholder || 'Start typing...'}
                   </div>
                 }
-                ErrorBoundary={LexicalErrorBoundary as any}
+                ErrorBoundary={LexicalErrorBoundary}
               />
               <HistoryPlugin />
               <ListPlugin />
