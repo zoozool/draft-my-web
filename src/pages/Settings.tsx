@@ -253,6 +253,23 @@ const Settings = () => {
 
         <Card>
           <CardHeader>
+            <CardTitle>System</CardTitle>
+            <CardDescription>
+              View system logs and errors
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/settings/logs")}
+            >
+              View Error Logs
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Email Rate Limit</CardTitle>
             <CardDescription>
               Set the maximum number of emails to send per hour

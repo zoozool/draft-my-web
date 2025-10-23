@@ -177,6 +177,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      query_logs: { Args: { query_text: string }; Returns: Json }
       trigger_composite_generation: { Args: never; Returns: undefined }
     }
     Enums: {
