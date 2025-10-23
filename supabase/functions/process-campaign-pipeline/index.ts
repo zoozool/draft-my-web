@@ -79,7 +79,7 @@ const handler = async (req: Request): Promise<Response> => {
         .eq("user_id", campaign.user_id)
         .single();
 
-      const batchSize = smtpSettings?.composite_batch_size || 20;
+      const batchSize = Math.min(smtpSettings?.composite_batch_size || 10, 10); // Max 10 per batch to avoid timeouts
 
       // Process images in batches
       let remainingToProcess = pendingComposites;
@@ -89,27 +89,33 @@ const handler = async (req: Request): Promise<Response> => {
         
         console.log(`[Pipeline] Processing batch: ${currentBatch} images`);
 
-        const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-composite-images`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({
-            campaignId,
-            baseImageUrl: campaign.base_image_url,
-            limit: currentBatch,
-          }),
-        });
+        try {
+          // Use supabase.functions.invoke with shorter timeout
+          const { data: generateResult, error: generateError } = await supabase.functions.invoke(
+            "generate-composite-images",
+            {
+              body: {
+                campaignId,
+                baseImageUrl: campaign.base_image_url,
+                limit: currentBatch,
+              },
+            }
+          );
 
-        if (!generateResponse.ok) {
-          const errorText = await generateResponse.text();
-          console.error("[Pipeline] Image generation failed:", errorText);
-          break;
+          if (generateError) {
+            console.error("[Pipeline] Image generation error:", generateError);
+            // Continue to next batch even if one fails
+            remainingToProcess -= currentBatch;
+            continue;
+          }
+
+          totalImagesProcessed += generateResult?.processed || 0;
+        } catch (error) {
+          console.error("[Pipeline] Image generation exception:", error);
+          // Continue to next batch
+          remainingToProcess -= currentBatch;
+          continue;
         }
-
-        const generateResult = await generateResponse.json();
-        totalImagesProcessed += generateResult.processed || 0;
         
         // Check if there are more to process
         const { count: stillPending } = await supabase
@@ -138,18 +144,34 @@ const handler = async (req: Request): Promise<Response> => {
       .update({ processing_status: "sending_emails" })
       .eq("id", campaignId);
 
-    const sendResponse = await fetch(`${supabaseUrl}/functions/v1/send-emails`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({ campaignId }),
-    });
+    let sendResult: any = { totalSent: 0, totalFailed: 0 };
+    
+    try {
+      const { data, error: sendError } = await supabase.functions.invoke("send-emails", {
+        body: { campaignId },
+      });
 
-    if (!sendResponse.ok) {
-      const errorText = await sendResponse.text();
-      console.error("[Pipeline] Email sending failed:", errorText);
+      if (sendError) {
+        console.error("[Pipeline] Email sending error:", sendError);
+        
+        await supabase
+          .from("campaigns")
+          .update({ processing_status: "error" })
+          .eq("id", campaignId);
+
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            error: "Email sending failed",
+            details: sendError.message
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      sendResult = data || sendResult;
+    } catch (error) {
+      console.error("[Pipeline] Email sending exception:", error);
       
       await supabase
         .from("campaigns")
@@ -159,14 +181,12 @@ const handler = async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: "Email sending failed",
-          details: errorText
+          error: "Email sending exception",
+          details: error instanceof Error ? error.message : "Unknown error"
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const sendResult = await sendResponse.json();
 
     // Step 5: Mark campaign as completed
     console.log("[Pipeline] Pipeline completed successfully");
