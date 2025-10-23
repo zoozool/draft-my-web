@@ -9,15 +9,19 @@ A full-stack email campaign management application built with React, TypeScript,
 ## Features
 
 - 📧 **Email Campaign Management** - Create and manage email campaigns with personalized templates
+- 🤖 **Automated Pipeline** - Fully automated image generation and email sending via cron jobs
 - 🖼️ **Composite Image Generation** - Automatically generate personalized images by compositing company logos onto base templates
-- 📊 **Analytics Dashboard** - Real-time tracking of sent, pending, and failed emails
+- ⏰ **Scheduled Processing** - Cron jobs run every 4 hours (and daily at 2 AM) to process active campaigns
+- 📊 **Analytics Dashboard** - Real-time tracking of sent, pending, and failed emails with live status updates
 - 📁 **CSV Import** - Bulk import contacts via CSV upload with logo URL support
-- 🎨 **Template Personalization** - Dynamic template variables ({{first_name}}, {{last_name}}, {{company}}, {{email}})
+- 🎨 **Template Personalization** - Dynamic template variables ({{first_name}}, {{last_name}}, {{company}}, {{email}}, {{composite_image}})
 - 🎯 **Logo Placement Control** - Configurable quadrilateral coordinates for precise logo positioning
 - 🔐 **Secure Authentication** - User authentication with Lovable Cloud Auth
 - 📈 **Campaign Analytics** - Visual charts showing campaign performance and success rates
-- 🔄 **Batch Processing** - Configurable batch size for composite image generation
+- 🔄 **Batch Processing** - Configurable batch size (default: 20) for composite image generation
 - 📸 **Image Gallery** - Browse and download generated composite images
+- 🎛️ **Manual Override** - "Process Now" button for immediate pipeline execution
+- 🔄 **Auto-Refresh UI** - Real-time status updates when processing is active
 
 ## Tech Stack
 
@@ -76,6 +80,41 @@ A full-stack email campaign management application built with React, TypeScript,
 - `updated_at` (timestamp)
 
 ## Edge Functions
+
+### process-campaign-pipeline (NEW - Orchestrator)
+**Path**: `supabase/functions/process-campaign-pipeline/index.ts`
+
+**Master orchestrator that automates the entire workflow:**
+1. Checks campaign status and pending work
+2. Generates composite images in batches (respects `composite_batch_size`)
+3. Sends emails automatically after images are ready
+4. Updates `processing_status` throughout the pipeline
+5. Handles errors gracefully with status rollback
+
+**Request Body**:
+```json
+{
+  "campaignId": "uuid"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Campaign pipeline completed successfully",
+  "imagesProcessed": 47,
+  "emailsSent": 47,
+  "emailsFailed": 0
+}
+```
+
+**Processing Flow**:
+```
+idle → processing_images → sending_emails → completed
+                                ↓
+                             error (on failure)
+```
 
 ### process-csv
 **Path**: `supabase/functions/process-csv/index.ts`

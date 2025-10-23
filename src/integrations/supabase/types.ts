@@ -21,8 +21,10 @@ export type Database = {
           created_at: string | null
           failed_count: number | null
           id: string
+          last_processed_at: string | null
           name: string
           pending_count: number | null
+          processing_status: string | null
           sent_count: number | null
           status: string
           subject: string
@@ -36,8 +38,10 @@ export type Database = {
           created_at?: string | null
           failed_count?: number | null
           id?: string
+          last_processed_at?: string | null
           name: string
           pending_count?: number | null
+          processing_status?: string | null
           sent_count?: number | null
           status?: string
           subject: string
@@ -51,8 +55,10 @@ export type Database = {
           created_at?: string | null
           failed_count?: number | null
           id?: string
+          last_processed_at?: string | null
           name?: string
           pending_count?: number | null
+          processing_status?: string | null
           sent_count?: number | null
           status?: string
           subject?: string
@@ -177,6 +183,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_process_campaigns: { Args: never; Returns: undefined }
       query_logs: { Args: { query_text: string }; Returns: Json }
       trigger_composite_generation: { Args: never; Returns: undefined }
     }

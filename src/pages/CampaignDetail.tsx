@@ -91,6 +91,7 @@ const CampaignDetail = () => {
   const [compositePage, setCompositePage] = useState(1);
   const [isEditingCoordinates, setIsEditingCoordinates] = useState(false);
   const [batchSize, setBatchSize] = useState(5);
+  const [isProcessingPipeline, setIsProcessingPipeline] = useState(false);
   const [coordinates, setCoordinates] = useState({
     topLeft: { x: 888, y: 500 },
     topRight: { x: 1201, y: 493 },
@@ -672,6 +673,22 @@ const CampaignDetail = () => {
     }
   }, [user]);
 
+  // Auto-refresh when processing
+  useEffect(() => {
+    if (!campaign) return;
+    
+    const isProcessing = campaign.processing_status === "processing_images" || 
+                        campaign.processing_status === "sending_emails";
+    
+    if (!isProcessing) return;
+
+    const interval = setInterval(() => {
+      fetchCampaignData();
+    }, 3000); // Refresh every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [campaign?.processing_status]);
+
   const fetchCampaignData = async () => {
     try {
       const { data: campaignData, error: campaignError } = await supabase
@@ -699,6 +716,34 @@ const CampaignDetail = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleProcessPipeline = async () => {
+    if (!campaign) return;
+    
+    setIsProcessingPipeline(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-campaign-pipeline", {
+        body: { campaignId: campaign.id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Pipeline started",
+        description: "Automated processing has been initiated. Images will be generated and emails sent automatically.",
+      });
+
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to start pipeline",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPipeline(false);
     }
   };
 
@@ -769,8 +814,23 @@ const CampaignDetail = () => {
                 <Badge className="bg-primary text-primary-foreground">
                   {campaign.status}
                 </Badge>
+                {campaign.processing_status && campaign.processing_status !== "idle" && (
+                  <Badge variant="outline" className="animate-pulse">
+                    {campaign.processing_status === "processing_images" && "🖼️ Generating Images"}
+                    {campaign.processing_status === "sending_emails" && "📧 Sending Emails"}
+                    {campaign.processing_status === "completed" && "✅ Completed"}
+                    {campaign.processing_status === "error" && "❌ Error"}
+                  </Badge>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">Campaign ID: {id}</p>
+              <p className="text-sm text-muted-foreground">
+                Campaign ID: {id}
+                {campaign.last_processed_at && (
+                  <span className="ml-3">
+                    Last processed: {new Date(campaign.last_processed_at).toLocaleString()}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -778,11 +838,19 @@ const CampaignDetail = () => {
               <>
                 <Button 
                   onClick={handleGenerateComposites} 
-                  disabled={isGenerating}
+                  disabled={isGenerating || isProcessingPipeline}
                   variant="outline"
                 >
                   <Image className="h-4 w-4 mr-2" />
                   {isGenerating ? "Generating..." : "Generate Composites"}
+                </Button>
+                <Button 
+                  onClick={handleProcessPipeline} 
+                  disabled={isProcessingPipeline || campaign.processing_status !== "idle"}
+                  variant="default"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isProcessingPipeline ? "animate-spin" : ""}`} />
+                  {isProcessingPipeline ? "Processing..." : "Process Now (Auto)"}
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -795,8 +863,8 @@ const CampaignDetail = () => {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Start Campaign?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will activate your campaign and start sending emails to pending contacts. 
-                        Make sure you have reviewed your email template and composite images before proceeding.
+                        This will activate your campaign for automatic cron processing. 
+                        The system will automatically generate images and send emails every 4 hours.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
