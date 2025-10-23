@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
+import { render as renderSvg } from "https://deno.land/x/resvg_wasm/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,38 +99,37 @@ async function convertSvgToPng(
     
     try {
       // Fallback: Download SVG and rehost to Storage
-      console.log(`[${contactEmail}] Downloading SVG to rehost...`);
+      console.log(`[${contactEmail}] Downloading SVG content...`);
       const svgResponse = await fetch(svgUrl);
       if (!svgResponse.ok) {
         throw new Error(`Failed to download SVG: ${svgResponse.status}`);
       }
+      const svgText = await svgResponse.text();
       
-      const svgBlob = await svgResponse.arrayBuffer();
-      const fileName = `svg-rehost/${contactEmail.replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.svg`;
+      console.log(`[${contactEmail}] Rasterizing SVG via resvg...`);
+      const pngBytes = await renderSvg(svgText);
       
-      console.log(`[${contactEmail}] Uploading SVG to storage...`);
-      const { error: uploadError } = await supabaseClient
+      const fileName = `svg-converted/${contactEmail.replace(/[^a-z0-9]/gi, '_')}-${Date.now()}.png`;
+      console.log(`[${contactEmail}] Uploading rasterized PNG to storage...`);
+      const { error: uploadPngError } = await supabaseClient
         .storage
         .from("logos")
-        .upload(fileName, svgBlob, {
-          contentType: "image/svg+xml",
+        .upload(fileName, pngBytes, {
+          contentType: "image/png",
           upsert: true
         });
-
-      if (uploadError) {
-        throw new Error(`Storage upload failed: ${uploadError.message}`);
+      
+      if (uploadPngError) {
+        throw new Error(`Storage upload failed: ${uploadPngError.message}`);
       }
-
+      
       const { data: urlData } = supabaseClient
         .storage
         .from("logos")
         .getPublicUrl(fileName);
-
-      console.log(`[${contactEmail}] SVG rehosted to: ${urlData.publicUrl}`);
-      console.log(`[${contactEmail}] Retrying conversion with HTTPS URL...`);
       
-      // Second attempt with rehosted HTTPS URL
-      return await tryConversion(urlData.publicUrl);
+      console.log(`[${contactEmail}] PNG available at: ${urlData.publicUrl}`);
+      return urlData.publicUrl;
       
     } catch (fallbackError: any) {
       console.error(`[${contactEmail}] Fallback SVG conversion also failed:`, fallbackError.message);
