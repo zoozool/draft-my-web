@@ -10,6 +10,7 @@ const corsHeaders = {
 interface CompositeRequest {
   campaignId: string;
   baseImageUrl?: string; // URL to bazowy.jpg or leave empty to use default
+  limit?: number; // Number of images to generate per batch (default: 5)
 }
 
 interface Point {
@@ -262,7 +263,7 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
     const body: CompositeRequest = await req.json();
-    const { campaignId, baseImageUrl } = body;
+    const { campaignId, baseImageUrl, limit = 5 } = body;
 
     // Define the white rectangle coordinates (quadrilateral)
     // TL (888,500), TR (1201,493), BR (1198,724), BL (886,726)
@@ -290,7 +291,7 @@ const handler = async (req: Request): Promise<Response> => {
       .eq("campaign_id", campaignId)
       .not("logo_url", "is", null)
       .is("composite_image_url", null)
-      .limit(20); // Process max 20 contacts per invocation to avoid timeout
+      .limit(limit); // Process specified number of contacts per invocation
 
     if (contactsError) throw contactsError;
 
