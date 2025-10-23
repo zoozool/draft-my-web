@@ -361,6 +361,54 @@ const CampaignDetail = () => {
     }
   };
 
+  const handleResetToPending = async () => {
+    if (!campaign) return;
+    
+    try {
+      const sentContacts = contacts.filter(c => c.status === "sent");
+      
+      if (sentContacts.length === 0) {
+        toast({
+          title: "No contacts to reset",
+          description: "There are no sent contacts to reset",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from("contacts")
+        .update({ status: "pending", sent_at: null })
+        .eq("campaign_id", campaign.id)
+        .eq("status", "sent");
+
+      if (error) throw error;
+
+      // Update campaign counts
+      const { error: updateError } = await supabase
+        .from("campaigns")
+        .update({
+          sent_count: 0,
+          pending_count: campaign.pending_count + sentContacts.length,
+        })
+        .eq("id", campaign.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Contacts reset to pending",
+        description: `${sentContacts.length} contact(s) can now be resent with composite images`,
+      });
+
+      fetchCampaignData();
+    } catch (error: any) {
+      toast({
+        title: "Error resetting contacts",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleEditClick = () => {
     if (campaign) {
       setEditSubject(campaign.subject);
@@ -972,15 +1020,25 @@ const CampaignDetail = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Generated Composite Images</CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleRegenerateComposites}
-                  disabled={isRegenerating}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  {isRegenerating ? "Regenerating..." : "Regenerate All"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRegenerateComposites}
+                    disabled={isRegenerating}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    {isRegenerating ? "Regenerating..." : "Regenerate All"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleResetToPending}
+                    disabled={contacts.filter(c => c.status === "sent").length === 0}
+                  >
+                    Reset Sent to Pending
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
