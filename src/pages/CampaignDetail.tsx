@@ -39,6 +39,7 @@ import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { WysiwygEditor } from "@/components/ui/wysiwyg-editor";
 
 const CampaignDetail = () => {
   const { id } = useParams();
@@ -917,13 +918,11 @@ const CampaignDetail = () => {
                   <p className="text-sm text-muted-foreground mt-1 mb-2">
                     Available variables: <code className="text-primary">{'{{company}}'}</code>, <code className="text-primary">{'{{first_name}}'}</code>, <code className="text-primary">{'{{composite_image}}'}</code>, <code className="text-primary">{'{{logo_url}}'}</code>
                   </p>
-                  <Textarea
-                    id="edit-body"
+                  <WysiwygEditor
                     value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                    className="mt-2 font-mono text-sm"
-                    rows={12}
+                    onChange={setEditBody}
                     placeholder="Enter email body HTML..."
+                    className="mt-2"
                   />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
