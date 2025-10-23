@@ -504,15 +504,18 @@ const handler = async (req: Request): Promise<Response> => {
         successCount++;
 
       } catch (error: any) {
-        console.error(`[${contact.email}] ❌ FAILED:`, {
+        console.error(`[${contact.email}] ❌ FAILED - Skipping to next contact:`, {
           error: error.message,
           stack: error.stack,
           logoUrl: contact.logo_url,
           company: contact.company
         });
+        console.log(`[${contact.email}] Continuing with remaining contacts...`);
         failCount++;
         const errorDetails = `${error.message}${error.cause ? ` (${error.cause})` : ''}`;
         errors.push(`${contact.email} (${contact.company || 'No company'}): ${errorDetails}`);
+        // Continue to next contact
+        continue;
       }
     }
 
