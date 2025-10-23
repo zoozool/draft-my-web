@@ -1349,6 +1349,9 @@ const CampaignDetail = () => {
                       if (!contact.logo_url || contact.logo_url.trim() === "") {
                         return "bg-orange-500/10 hover:bg-orange-500/20";
                       }
+                      if (!contact.composite_image_url) {
+                        return "bg-blue-500/10 hover:bg-blue-500/20";
+                      }
                       return "";
                     };
 
