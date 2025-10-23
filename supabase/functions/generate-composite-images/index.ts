@@ -232,7 +232,8 @@ const handler = async (req: Request): Promise<Response> => {
       .select("*")
       .eq("campaign_id", campaignId)
       .not("logo_url", "is", null)
-      .is("composite_image_url", null);
+      .is("composite_image_url", null)
+      .limit(20); // Process max 20 contacts per invocation to avoid timeout
 
     if (contactsError) throw contactsError;
 
@@ -250,7 +251,22 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log(`Processing ${contacts.length} contacts`);
+    // Filter out contacts with empty or invalid logo URLs
+    const validContacts = contacts.filter(c => {
+      const url = c.logo_url?.trim();
+      if (!url || url === '') {
+        console.log(`[${c.email}] Skipping - empty logo URL`);
+        return false;
+      }
+      // Skip SVG files as they're not supported
+      if (url.toLowerCase().endsWith('.svg') || url.includes('.svg?')) {
+        console.log(`[${c.email}] Skipping - SVG format not supported: ${url}`);
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`Processing ${validContacts.length} valid contacts (filtered from ${contacts.length} total)`);
 
     // Get or create base image (bazowy.jpg or default)
     const finalBaseImageUrl = await getOrCreateBaseImage(baseImageUrl, destCorners);
@@ -260,7 +276,7 @@ const handler = async (req: Request): Promise<Response> => {
     let failCount = 0;
     const errors: string[] = [];
 
-    for (const contact of contacts) {
+    for (const contact of validContacts) {
       try {
         console.log(`\n[${contact.email}] ===== Starting composite generation =====`);
         console.log(`[${contact.email}] Contact ID: ${contact.id}`);
