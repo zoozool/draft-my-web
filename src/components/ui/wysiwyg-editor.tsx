@@ -34,7 +34,25 @@ export const WysiwygEditor = ({ value, onChange, placeholder, className }: Wysiw
       Placeholder.configure({
         placeholder: placeholder || 'Start typing...',
       }),
-      Image.configure({
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            src: {
+              default: null,
+              parseHTML: element => element.getAttribute('src'),
+              renderHTML: attributes => {
+                if (!attributes.src) {
+                  return {};
+                }
+                return {
+                  src: attributes.src,
+                };
+              },
+            },
+          };
+        },
+      }).configure({
         HTMLAttributes: {
           class: 'max-w-full h-auto rounded-md',
         },
