@@ -90,6 +90,7 @@ const CampaignDetail = () => {
   const [compositeErrors, setCompositeErrors] = useState<string[]>([]);
   const [compositePage, setCompositePage] = useState(1);
   const [isEditingCoordinates, setIsEditingCoordinates] = useState(false);
+  const [batchSize, setBatchSize] = useState(5);
   const [coordinates, setCoordinates] = useState({
     topLeft: { x: 888, y: 500 },
     topRight: { x: 1201, y: 493 },
@@ -293,7 +294,8 @@ const CampaignDetail = () => {
       const { data, error } = await supabase.functions.invoke("generate-composite-images", {
         body: { 
           campaignId: campaign.id,
-          baseImageUrl: campaign.base_image_url || undefined
+          baseImageUrl: campaign.base_image_url || undefined,
+          limit: batchSize
         },
       });
 
@@ -347,7 +349,8 @@ const CampaignDetail = () => {
       const { data, error } = await supabase.functions.invoke("generate-composite-images", {
         body: { 
           campaignId: campaign.id,
-          baseImageUrl: campaign.base_image_url || undefined
+          baseImageUrl: campaign.base_image_url || undefined,
+          limit: batchSize
         },
       });
 
@@ -642,6 +645,32 @@ const CampaignDetail = () => {
       fetchCampaignData();
     }
   }, [user, id]);
+
+  useEffect(() => {
+    const fetchBatchSize = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from("smtp_settings")
+          .select("composite_batch_size")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data?.composite_batch_size) {
+          setBatchSize(data.composite_batch_size);
+        }
+      } catch (error) {
+        console.error("Error fetching batch size:", error);
+        // Keep default value of 5 if error
+      }
+    };
+
+    if (user) {
+      fetchBatchSize();
+    }
+  }, [user]);
 
   const fetchCampaignData = async () => {
     try {

@@ -117,6 +117,7 @@ export type Database = {
       }
       smtp_settings: {
         Row: {
+          composite_batch_size: number
           created_at: string
           emails_per_hour_limit: number | null
           id: string
@@ -134,6 +135,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          composite_batch_size?: number
           created_at?: string
           emails_per_hour_limit?: number | null
           id?: string
@@ -151,6 +153,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          composite_batch_size?: number
           created_at?: string
           emails_per_hour_limit?: number | null
           id?: string

@@ -20,6 +20,7 @@ const settingsSchema = z.object({
   use_tls: z.boolean(),
   is_active: z.boolean(),
   emails_per_hour_limit: z.number().int().min(1, "Limit must be at least 1").max(10000, "Limit cannot exceed 10,000"),
+  composite_batch_size: z.number().int().min(5, "Batch size must be at least 5").max(100, "Batch size cannot exceed 100"),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -43,6 +44,7 @@ const Settings = () => {
     use_tls: true,
     is_active: true,
     emails_per_hour_limit: 100,
+    composite_batch_size: 5,
   });
 
   useEffect(() => {
@@ -73,6 +75,7 @@ const Settings = () => {
           use_tls: data.use_tls,
           is_active: data.is_active,
           emails_per_hour_limit: data.emails_per_hour_limit || 100,
+          composite_batch_size: data.composite_batch_size || 5,
         });
         setTestStatus(data.test_status);
       }
@@ -194,6 +197,7 @@ const Settings = () => {
           use_tls: formData.use_tls,
           is_active: formData.is_active,
           emails_per_hour_limit: formData.emails_per_hour_limit,
+          composite_batch_size: formData.composite_batch_size,
           test_status: testStatus || null,
           last_tested_at: testStatus ? new Date().toISOString() : null,
         }, {
@@ -270,6 +274,36 @@ const Settings = () => {
               )}
               <p className="text-sm text-muted-foreground">
                 This limit helps prevent your emails from being marked as spam
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Composite Image Generation</CardTitle>
+            <CardDescription>
+              Set how many composite images to generate per batch
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="composite_batch_size">Images per Batch *</Label>
+              <Input
+                id="composite_batch_size"
+                type="number"
+                min="5"
+                max="100"
+                placeholder="5"
+                value={formData.composite_batch_size}
+                onChange={(e) => setFormData({ ...formData, composite_batch_size: parseInt(e.target.value) || 5 })}
+                className={errors.composite_batch_size ? "border-destructive" : ""}
+              />
+              {errors.composite_batch_size && (
+                <p className="text-sm text-destructive">{errors.composite_batch_size}</p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Number of composite images to generate each time you click "Generate Composites" (5-100)
               </p>
             </div>
           </CardContent>
