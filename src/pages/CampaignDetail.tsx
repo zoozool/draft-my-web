@@ -784,13 +784,29 @@ const CampaignDetail = () => {
                   <Image className="h-4 w-4 mr-2" />
                   {isGenerating ? "Generating..." : "Generate Composites"}
                 </Button>
-                <Button 
-                  onClick={handleStartCampaign} 
-                  disabled={isStarting}
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  {isStarting ? "Starting..." : "Start Campaign"}
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={isStarting}>
+                      <Mail className="h-4 w-4 mr-2" />
+                      {isStarting ? "Starting..." : "Start Campaign"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Start Campaign?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will activate your campaign and start sending emails to pending contacts. 
+                        Make sure you have reviewed your email template and composite images before proceeding.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleStartCampaign}>
+                        Start Campaign
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </>
             )}
             {campaign.status === "active" && campaign.pending_count > 0 && (
