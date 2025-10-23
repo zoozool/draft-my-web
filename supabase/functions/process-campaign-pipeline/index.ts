@@ -79,7 +79,7 @@ const handler = async (req: Request): Promise<Response> => {
         .eq("user_id", campaign.user_id)
         .single();
 
-      const batchSize = Math.min(smtpSettings?.composite_batch_size || 10, 10); // Max 10 per batch to avoid timeouts
+      const batchSize = Math.min(smtpSettings?.composite_batch_size || 3, 3); // Max 3 per batch to avoid CPU timeout
 
       // Process images in batches
       let remainingToProcess = pendingComposites;
