@@ -32,6 +32,26 @@ A full-stack email campaign management application built with React, TypeScript,
 - **Email Service**: Resend API
 - **Charts**: Recharts
 
+## How It Works
+
+### Automated Workflow (Production Mode)
+
+1. **Upload CSV** - Import contacts with email, name, company, and logo_url
+2. **Configure Campaign** - Set email subject, body template, and base image
+3. **Activate Campaign** - Click "Start Campaign" to enable automatic processing
+4. **Automated Processing** - System runs automatically:
+   - **Cron Jobs**: Run every 4 hours (+ daily at 2 AM)
+   - **Image Generation**: Processes up to 100 images per run (5 campaigns × 20 batch size)
+   - **Email Sending**: Sends emails after images are generated
+   - **Status Tracking**: Updates campaign progress in real-time
+5. **Monitor Progress** - Watch live status updates and analytics
+
+### Manual Mode (For Testing)
+
+- **"Generate Composites"** - Manually trigger image generation (configurable batch size)
+- **"Process Now (Auto)"** - Manually trigger full pipeline (images → emails)
+- **"Send Now"** - Manually send emails to pending contacts
+
 ## Database Schema
 
 ### Tables
@@ -42,12 +62,16 @@ A full-stack email campaign management application built with React, TypeScript,
 - `name` (text)
 - `subject` (text)
 - `body_template` (text) - Email template with variable placeholders
-- `status` (text) - 'draft', 'sending', 'completed'
+- `base_image_url` (text) - Base template for compositing
+- `status` (text) - 'draft', 'active', 'completed'
+- `processing_status` (text) - 'idle', 'processing_images', 'sending_emails', 'completed', 'error'
 - `total_contacts` (integer)
 - `sent_count` (integer)
 - `failed_count` (integer)
 - `pending_count` (integer)
+- `last_processed_at` (timestamp) - Last time cron processed this campaign
 - `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 **contacts**
 - `id` (uuid, primary key)
@@ -115,6 +139,11 @@ idle → processing_images → sending_emails → completed
                                 ↓
                              error (on failure)
 ```
+
+**Triggered By**:
+- Cron jobs (automatic, every 4 hours)
+- Manual button click ("Process Now (Auto)")
+- Database function: `auto_process_campaigns()`
 
 ### process-csv
 **Path**: `supabase/functions/process-csv/index.ts`
@@ -194,9 +223,75 @@ Default quadrilateral coordinates for logo placement:
 
 These can be customized in the campaign detail page UI.
 
-## Setting Up Cron Jobs
+## Automated Cron Jobs
 
-You can schedule automated email sends in two ways:
+**IMPORTANT**: The cron jobs are **automatically created** by the database migration. No manual setup required!
+
+### Automatic Cron Schedules
+
+Two cron jobs are configured to process campaigns automatically:
+
+**1. High-Frequency Processing** (Every 4 hours)
+- **Schedule**: `0 */4 * * *` (12 AM, 4 AM, 8 AM, 12 PM, 4 PM, 8 PM)
+- **Function**: `auto_process_campaigns()`
+- **Processes**: Up to 5 campaigns per run
+- **Batch Size**: 20 images per campaign (configurable in `smtp_settings`)
+- **Total**: Up to 100 images per run
+
+**2. Daily Processing** (Once per day)
+- **Schedule**: `0 2 * * *` (2 AM daily)
+- **Function**: `auto_process_campaigns()`
+- **Same processing capacity**: 5 campaigns, 20 images each
+
+### How Cron Works
+
+1. **Cron triggers** → Calls `auto_process_campaigns()`
+2. **Function finds** campaigns where:
+   - `status = 'active'`
+   - `processing_status = 'idle'`
+   - Has contacts with `logo_url` but no `composite_image_url`
+3. **For each campaign**:
+   - Updates `processing_status = 'processing_images'`
+   - Calls `process-campaign-pipeline` edge function
+   - Pipeline handles images → emails → status updates
+4. **Prevents race conditions**: Only processes campaigns in `idle` state
+
+### Monitoring Cron Jobs
+
+View cron job status in your Lovable Cloud backend:
+
+<lov-actions>
+  <lov-open-backend>View Backend</lov-open-backend>
+</lov-actions>
+
+```sql
+-- List all cron jobs
+SELECT * FROM cron.job;
+
+-- View cron job run history
+SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
+```
+
+### Adjusting Batch Sizes
+
+Update the batch size in `smtp_settings`:
+```sql
+UPDATE smtp_settings 
+SET composite_batch_size = 50 
+WHERE user_id = 'your-user-id';
+```
+
+### Manual Trigger
+
+Users can bypass cron and trigger immediate processing:
+- **UI**: Click "Process Now (Auto)" button on campaign detail page
+- **Edge Function**: Direct call to `process-campaign-pipeline`
+
+---
+
+## Legacy Manual Cron Setup (Optional)
+
+If you want to manage cron externally, you can use these methods:
 
 ### Option 1: External Cron (From Your Own Server/VPS)
 
