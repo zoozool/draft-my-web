@@ -26,11 +26,16 @@ serve(async (req) => {
 
     // Parse CSV content
     const lines = csvContent.split("\n").filter((line: string) => line.trim());
-    const firstLine = lines[0].split(",").map((h: string) => h.trim().toLowerCase());
+    
+    // Auto-detect delimiter (comma or semicolon)
+    const delimiter = lines[0].includes(";") ? ";" : ",";
+    console.log("Detected delimiter:", delimiter);
+    
+    const firstLine = lines[0].split(delimiter).map((h: string) => h.trim().toLowerCase());
     
     // Check if first line contains headers or data (by looking for email pattern)
     const hasHeaders = firstLine.some((cell: string) => 
-      cell === "email" || cell === "company" || cell === "contact" || cell === "logourl" || cell === "logo_url"
+      cell === "email" || cell === "company" || cell === "contact" || cell === "logourl" || cell === "logo_url" || cell === "title"
     );
     
     let emailIndex, firstNameIndex, lastNameIndex, companyIndex, logoUrlIndex;
@@ -43,7 +48,7 @@ serve(async (req) => {
         h === "first_name" || h === "firstname" || h === "contact" || h === "name"
       );
       lastNameIndex = firstLine.findIndex((h: string) => h === "last_name" || h === "lastname");
-      companyIndex = firstLine.findIndex((h: string) => h === "company");
+      companyIndex = firstLine.findIndex((h: string) => h === "company" || h === "title");
       logoUrlIndex = firstLine.findIndex((h: string) => h === "logourl" || h === "logo_url" || h === "logo");
       startIndex = 1; // Skip header row
       
@@ -64,7 +69,7 @@ serve(async (req) => {
 
     const contacts = [];
     for (let i = startIndex; i < lines.length; i++) {
-      const values = lines[i].split(",").map((v: string) => v.trim());
+      const values = lines[i].split(delimiter).map((v: string) => v.trim());
       const email = values[emailIndex];
       
       if (email && email.includes("@")) {
