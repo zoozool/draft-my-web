@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity, Settings } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity, Settings, Sparkles, Download, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +16,13 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  
+  // Composite Generator state
+  const [testBaseImage, setTestBaseImage] = useState("");
+  const [testLogoUrl, setTestLogoUrl] = useState("");
+  const [testCoordinates, setTestCoordinates] = useState({ x: 888, y: 500, width: 313, height: 226 });
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [generatedTestImage, setGeneratedTestImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -45,6 +54,95 @@ const Dashboard = () => {
       });
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  const handleGenerateTestComposite = async () => {
+    if (!testBaseImage || !testLogoUrl) {
+      toast({
+        title: "Missing fields",
+        description: "Please provide both base image URL and logo URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingTest(true);
+    setGeneratedTestImage(null);
+
+    try {
+      const loadImage = (url: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = window.document.createElement('img') as HTMLImageElement;
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+          img.src = url;
+        });
+      };
+
+      // Cache logo to avoid CORS issues
+      const { data: cacheData, error: cacheError } = await supabase.functions.invoke('cache-logo', {
+        body: { logoUrl: testLogoUrl, contactId: 'test-' + Date.now() }
+      });
+
+      if (cacheError) throw cacheError;
+      const cachedLogoUrl = cacheData.cachedUrl;
+
+      // Load images
+      const [baseImage, logoImage] = await Promise.all([
+        loadImage(testBaseImage),
+        loadImage(cachedLogoUrl)
+      ]);
+
+      // Create canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = baseImage.width;
+      canvas.height = baseImage.height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not get canvas context");
+
+      // Draw base image
+      ctx.drawImage(baseImage, 0, 0);
+
+      // Calculate logo dimensions to fit within target area
+      const logoAspect = logoImage.width / logoImage.height;
+      const targetAspect = testCoordinates.width / testCoordinates.height;
+
+      let drawWidth, drawHeight, drawX, drawY;
+
+      if (logoAspect > targetAspect) {
+        drawWidth = testCoordinates.width;
+        drawHeight = drawWidth / logoAspect;
+        drawX = testCoordinates.x;
+        drawY = testCoordinates.y + (testCoordinates.height - drawHeight) / 2;
+      } else {
+        drawHeight = testCoordinates.height;
+        drawWidth = drawHeight * logoAspect;
+        drawX = testCoordinates.x + (testCoordinates.width - drawWidth) / 2;
+        drawY = testCoordinates.y;
+      }
+
+      // Draw logo
+      ctx.drawImage(logoImage, drawX, drawY, drawWidth, drawHeight);
+
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      setGeneratedTestImage(dataUrl);
+
+      toast({
+        title: "Test composite generated",
+        description: "Your test composite image has been generated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to generate test composite",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingTest(false);
     }
   };
 
@@ -195,6 +293,162 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Composite Generator */}
+        <Card className="mb-8 shadow-[var(--shadow-elegant)] border-primary/30 bg-gradient-to-br from-primary/5 to-accent/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-accent">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Composite Generator
+              </span>
+            </CardTitle>
+            <CardDescription>Test logo placement on base images</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="test-base-image">Base Image URL</Label>
+                  <Input
+                    id="test-base-image"
+                    type="url"
+                    value={testBaseImage}
+                    onChange={(e) => setTestBaseImage(e.target.value)}
+                    placeholder="https://example.com/base-image.jpg"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the URL of your base image
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="test-logo-url">Logo URL</Label>
+                  <Input
+                    id="test-logo-url"
+                    type="url"
+                    value={testLogoUrl}
+                    onChange={(e) => setTestLogoUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the URL of the logo to overlay
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Logo Placement Coordinates</Label>
+                  <div className="grid grid-cols-2 gap-3 p-4 bg-muted/50 rounded-lg">
+                    <div>
+                      <Label htmlFor="test-x" className="text-xs">X Position</Label>
+                      <Input
+                        id="test-x"
+                        type="number"
+                        value={testCoordinates.x}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, x: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-y" className="text-xs">Y Position</Label>
+                      <Input
+                        id="test-y"
+                        type="number"
+                        value={testCoordinates.y}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, y: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-width" className="text-xs">Width</Label>
+                      <Input
+                        id="test-width"
+                        type="number"
+                        value={testCoordinates.width}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, width: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-height" className="text-xs">Height</Label>
+                      <Input
+                        id="test-height"
+                        type="number"
+                        value={testCoordinates.height}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, height: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Define the target area (x, y, width, height) where the logo will be placed
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleGenerateTestComposite}
+                  disabled={isGeneratingTest || !testBaseImage || !testLogoUrl}
+                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                  size="lg"
+                >
+                  <Sparkles className="h-5 w-5 mr-2" />
+                  {isGeneratingTest ? "Generating..." : "Generate Test Composite"}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {generatedTestImage ? (
+                  <>
+                    <Label>Generated Composite Image</Label>
+                    <div className="relative border border-border/50 rounded-lg overflow-hidden bg-muted shadow-[var(--shadow-elegant)]">
+                      <img
+                        src={generatedTestImage}
+                        alt="Generated composite"
+                        className="w-full h-auto"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = generatedTestImage;
+                          link.download = 'test-composite.png';
+                          link.click();
+                        }}
+                        className="flex-1"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setGeneratedTestImage(null)}
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Clear
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-full min-h-[300px] border-2 border-dashed border-border/50 rounded-lg flex items-center justify-center bg-muted/20">
+                    <div className="text-center p-6">
+                      <Sparkles className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">
+                        Generated composite will appear here
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Analytics Section */}
         {stats.totalEmails > 0 && (
