@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload, Pencil, Laptop } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image as ImageIcon, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload, Pencil, Laptop, Sparkles } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocalCompositeGeneration } from "@/hooks/useLocalCompositeGeneration";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
@@ -100,6 +101,13 @@ const CampaignDetail = () => {
     bottomLeft: { x: 886, y: 726 }
   });
   
+  // Composite Generator state
+  const [testBaseImage, setTestBaseImage] = useState("");
+  const [testLogoUrl, setTestLogoUrl] = useState("");
+  const [testCoordinates, setTestCoordinates] = useState({ x: 888, y: 500, width: 313, height: 226 });
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [generatedTestImage, setGeneratedTestImage] = useState<string | null>(null);
+  
   const { 
     isGenerating: isGeneratingLocally, 
     progress: localProgress, 
@@ -110,6 +118,95 @@ const CampaignDetail = () => {
     if (!campaign) return;
     await generateLocalComposites(campaign.id, campaign.base_image_url);
     fetchCampaignData();
+  };
+
+  const handleGenerateTestComposite = async () => {
+    if (!testBaseImage || !testLogoUrl) {
+      toast({
+        title: "Missing fields",
+        description: "Please provide both base image URL and logo URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingTest(true);
+    setGeneratedTestImage(null);
+
+    try {
+      const loadImage = (url: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+          img.src = url;
+        });
+      };
+
+      // Cache logo to avoid CORS issues
+      const { data: cacheData, error: cacheError } = await supabase.functions.invoke('cache-logo', {
+        body: { logoUrl: testLogoUrl, contactId: 'test-' + Date.now() }
+      });
+
+      if (cacheError) throw cacheError;
+      const cachedLogoUrl = cacheData.cachedUrl;
+
+      // Load images
+      const [baseImage, logoImage] = await Promise.all([
+        loadImage(testBaseImage),
+        loadImage(cachedLogoUrl)
+      ]);
+
+      // Create canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = baseImage.width;
+      canvas.height = baseImage.height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not get canvas context");
+
+      // Draw base image
+      ctx.drawImage(baseImage, 0, 0);
+
+      // Calculate logo dimensions to fit within target area
+      const logoAspect = logoImage.width / logoImage.height;
+      const targetAspect = testCoordinates.width / testCoordinates.height;
+
+      let drawWidth, drawHeight, drawX, drawY;
+
+      if (logoAspect > targetAspect) {
+        drawWidth = testCoordinates.width;
+        drawHeight = drawWidth / logoAspect;
+        drawX = testCoordinates.x;
+        drawY = testCoordinates.y + (testCoordinates.height - drawHeight) / 2;
+      } else {
+        drawHeight = testCoordinates.height;
+        drawWidth = drawHeight * logoAspect;
+        drawX = testCoordinates.x + (testCoordinates.width - drawWidth) / 2;
+        drawY = testCoordinates.y;
+      }
+
+      // Draw logo
+      ctx.drawImage(logoImage, drawX, drawY, drawWidth, drawHeight);
+
+      // Convert to data URL
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      setGeneratedTestImage(dataUrl);
+
+      toast({
+        title: "Test composite generated",
+        description: "Your test composite image has been generated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to generate test composite",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingTest(false);
+    }
   };
 
   const handleStartCampaign = async () => {
@@ -856,7 +953,7 @@ const CampaignDetail = () => {
                   disabled={isGenerating || isProcessingPipeline || isGeneratingLocally}
                   variant="outline"
                 >
-                  <Image className="h-4 w-4 mr-2" />
+                  <ImageIcon className="h-4 w-4 mr-2" />
                   {isGenerating ? "Generating..." : "Generate (Server)"}
                 </Button>
                 <Button 
@@ -923,7 +1020,7 @@ const CampaignDetail = () => {
             {contacts.some(c => c.composite_image_url) && (
               <Link to={`/campaigns/${id}/composites`}>
                 <Button variant="outline">
-                  <Image className="h-4 w-4 mr-2" />
+                  <ImageIcon className="h-4 w-4 mr-2" />
                   View Gallery
                 </Button>
               </Link>
@@ -962,6 +1059,16 @@ const CampaignDetail = () => {
       </header>
 
       <main className="container mx-auto px-6 py-8">
+        <Tabs defaultValue="campaign" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="campaign">Campaign Overview</TabsTrigger>
+            <TabsTrigger value="generator">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Composite Generator
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="campaign" className="space-y-8">
         {/* Local Generation Progress */}
         {isGeneratingLocally && (
           <Card className="mb-8 shadow-[var(--shadow-elegant)] border-primary/30 bg-gradient-to-br from-primary/5 to-accent/5 backdrop-blur-sm">
@@ -1621,6 +1728,149 @@ const CampaignDetail = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+          </TabsContent>
+
+          <TabsContent value="generator" className="space-y-6">
+            <Card className="shadow-[var(--shadow-elegant)] border-primary/30 bg-gradient-to-br from-primary/5 to-accent/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl">
+                  <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-accent">
+                    <Sparkles className="h-6 w-6 text-white" />
+                  </div>
+                  <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                    Composite Generator
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="test-base-image">Base Image URL</Label>
+                  <Input
+                    id="test-base-image"
+                    type="url"
+                    value={testBaseImage}
+                    onChange={(e) => setTestBaseImage(e.target.value)}
+                    placeholder="https://example.com/base-image.jpg"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the URL of your base image
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="test-logo-url">Logo URL</Label>
+                  <Input
+                    id="test-logo-url"
+                    type="url"
+                    value={testLogoUrl}
+                    onChange={(e) => setTestLogoUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the URL of the logo to overlay
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Logo Placement Coordinates</Label>
+                  <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                    <div>
+                      <Label htmlFor="test-x" className="text-xs">X Position</Label>
+                      <Input
+                        id="test-x"
+                        type="number"
+                        value={testCoordinates.x}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, x: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-y" className="text-xs">Y Position</Label>
+                      <Input
+                        id="test-y"
+                        type="number"
+                        value={testCoordinates.y}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, y: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-width" className="text-xs">Width</Label>
+                      <Input
+                        id="test-width"
+                        type="number"
+                        value={testCoordinates.width}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, width: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="test-height" className="text-xs">Height</Label>
+                      <Input
+                        id="test-height"
+                        type="number"
+                        value={testCoordinates.height}
+                        onChange={(e) => setTestCoordinates({ ...testCoordinates, height: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Define the target area (x, y, width, height) where the logo will be placed
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleGenerateTestComposite}
+                  disabled={isGeneratingTest || !testBaseImage || !testLogoUrl}
+                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                  size="lg"
+                >
+                  <Sparkles className="h-5 w-5 mr-2" />
+                  {isGeneratingTest ? "Generating..." : "Generate Test Composite"}
+                </Button>
+
+                {generatedTestImage && (
+                  <div className="space-y-3 pt-4 border-t border-border/50">
+                    <Label>Generated Composite Image</Label>
+                    <div className="relative border border-border/50 rounded-lg overflow-hidden bg-muted shadow-[var(--shadow-elegant)]">
+                      <img
+                        src={generatedTestImage}
+                        alt="Generated composite"
+                        className="w-full h-auto"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = generatedTestImage;
+                          link.download = 'test-composite.png';
+                          link.click();
+                        }}
+                        className="flex-1"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setGeneratedTestImage(null)}
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
