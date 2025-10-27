@@ -215,6 +215,32 @@ const CompositeGallery = () => {
     }
   };
 
+  const handleRegenerateContact = async (contactId: string) => {
+    try {
+      // Clear the composite image for this specific contact
+      const { error: clearError } = await supabase
+        .from("contacts")
+        .update({ composite_image_url: null })
+        .eq("id", contactId);
+
+      if (clearError) throw clearError;
+
+      toast({
+        title: "Regenerating composite",
+        description: "The composite image will be regenerated for this contact",
+      });
+
+      // Refresh the data
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Failed to regenerate",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeleteContact = async () => {
     if (!deleteContactId) return;
 
@@ -376,12 +402,12 @@ const CompositeGallery = () => {
                               </p>
                               <p className="text-muted-foreground text-xs truncate">{contact.email}</p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleEditClick(contact)}
-                                className="flex-1 hover:bg-primary/10 hover:border-primary hover:text-primary"
+                                className="hover:bg-primary/10 hover:border-primary hover:text-primary"
                               >
                                 <Edit className="h-3.5 w-3.5 mr-1.5" />
                                 Edit
@@ -389,8 +415,17 @@ const CompositeGallery = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => handleRegenerateContact(contact.id)}
+                                className="hover:bg-accent/10 hover:border-accent hover:text-accent"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                Regen
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setDeleteContactId(contact.id)}
-                                className="flex-1 hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
+                                className="hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
                               >
                                 <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                                 Delete
