@@ -85,6 +85,20 @@ export const useLocalCompositeGeneration = () => {
     });
   };
 
+  const cacheLogo = async (logoUrl: string, contactId: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('cache-logo', {
+        body: { logoUrl, contactId }
+      });
+
+      if (error) throw error;
+      return data.cachedUrl;
+    } catch (error) {
+      console.error('Failed to cache logo, using original:', error);
+      return logoUrl; // Fallback to original
+    }
+  };
+
   const generateComposites = async (
     campaignId: string,
     baseImageUrl: string | null
@@ -142,8 +156,11 @@ export const useLocalCompositeGeneration = () => {
             currentContact: contact.company || contact.email,
           }));
 
-          // Load logo
-          const logoImage = await loadImage(contact.logo_url);
+          // Cache logo first to avoid CORS issues
+          const cachedLogoUrl = await cacheLogo(contact.logo_url, contact.id);
+          
+          // Load logo from cached URL
+          const logoImage = await loadImage(cachedLogoUrl);
 
           // Generate composite
           const compositeBlob = await generateComposite(

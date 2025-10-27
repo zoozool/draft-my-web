@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.process-campaign-pipeline]
 verify_jwt = false
+
+[functions.cache-logo]
+verify_jwt = false
