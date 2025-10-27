@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload, Pencil } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Download, Mail, Trash2, Image, Edit2, Save, X, Plus, UserPlus, RefreshCw, Upload, Pencil, Laptop } from "lucide-react";
+import { useLocalCompositeGeneration } from "@/hooks/useLocalCompositeGeneration";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -98,6 +99,18 @@ const CampaignDetail = () => {
     bottomRight: { x: 1198, y: 724 },
     bottomLeft: { x: 886, y: 726 }
   });
+  
+  const { 
+    isGenerating: isGeneratingLocally, 
+    progress: localProgress, 
+    generateComposites: generateLocalComposites 
+  } = useLocalCompositeGeneration();
+
+  const handleGenerateLocalComposites = async () => {
+    if (!campaign) return;
+    await generateLocalComposites(campaign.id, campaign.base_image_url);
+    fetchCampaignData();
+  };
 
   const handleStartCampaign = async () => {
     if (!campaign) return;
@@ -838,15 +851,23 @@ const CampaignDetail = () => {
               <>
                 <Button 
                   onClick={handleGenerateComposites} 
-                  disabled={isGenerating || isProcessingPipeline}
+                  disabled={isGenerating || isProcessingPipeline || isGeneratingLocally}
                   variant="outline"
                 >
                   <Image className="h-4 w-4 mr-2" />
-                  {isGenerating ? "Generating..." : "Generate Composites"}
+                  {isGenerating ? "Generating..." : "Generate (Server)"}
+                </Button>
+                <Button 
+                  onClick={handleGenerateLocalComposites} 
+                  disabled={isGenerating || isProcessingPipeline || isGeneratingLocally}
+                  variant="outline"
+                >
+                  <Laptop className="h-4 w-4 mr-2" />
+                  {isGeneratingLocally ? `Generating ${localProgress.current}/${localProgress.total}...` : "Generate Locally"}
                 </Button>
                 <Button 
                   onClick={handleProcessPipeline} 
-                  disabled={isProcessingPipeline || campaign.processing_status !== "idle"}
+                  disabled={isProcessingPipeline || campaign.processing_status !== "idle" || isGeneratingLocally}
                   variant="default"
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${isProcessingPipeline ? "animate-spin" : ""}`} />
@@ -938,6 +959,49 @@ const CampaignDetail = () => {
       </header>
 
       <main className="container mx-auto px-6 py-8">
+        {/* Local Generation Progress */}
+        {isGeneratingLocally && (
+          <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50 bg-accent/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Laptop className="h-5 w-5 animate-pulse" />
+                Generating Locally in Browser
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-foreground">
+                    Processing: {localProgress.currentContact}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {localProgress.current} of {localProgress.total}
+                  </span>
+                </div>
+                <Progress 
+                  value={(localProgress.current / localProgress.total) * 100} 
+                  className="h-3" 
+                />
+              </div>
+              {localProgress.errors.length > 0 && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm font-medium text-destructive mb-2">
+                    Errors ({localProgress.errors.length}):
+                  </p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {localProgress.errors.map((error, i) => (
+                      <p key={i} className="text-xs text-destructive/90">{error}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                💡 Local generation runs in your browser - no server limits or timeouts!
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        
         {/* Progress Overview */}
         <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50">
           <CardHeader>
