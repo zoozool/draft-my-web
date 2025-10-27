@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, RefreshCw, Download } from "lucide-react";
+import { ArrowLeft, RefreshCw, Download, Trash2, Edit } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -13,6 +13,26 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 
@@ -26,6 +46,15 @@ const CompositeGallery = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [compositeErrors, setCompositeErrors] = useState<string[]>([]);
+  const [editingContact, setEditingContact] = useState<any>(null);
+  const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    email: "",
+    first_name: "",
+    last_name: "",
+    company: "",
+    logo_url: "",
+  });
 
   const itemsPerPage = 50;
 
@@ -147,6 +176,71 @@ const CompositeGallery = () => {
     }
   };
 
+  const handleEditClick = (contact: any) => {
+    setEditingContact(contact);
+    setEditForm({
+      email: contact.email,
+      first_name: contact.first_name || "",
+      last_name: contact.last_name || "",
+      company: contact.company || "",
+      logo_url: contact.logo_url || "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingContact) return;
+
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .update(editForm)
+        .eq("id", editingContact.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Contact updated",
+        description: "Contact information has been updated successfully",
+      });
+
+      setEditingContact(null);
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteContact = async () => {
+    if (!deleteContactId) return;
+
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .delete()
+        .eq("id", deleteContactId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Contact deleted",
+        description: "Contact has been removed from the campaign",
+      });
+
+      setDeleteContactId(null);
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
@@ -243,6 +337,26 @@ const CompositeGallery = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {paginatedContacts.map((contact) => (
                     <div key={contact.id} className="space-y-2">
+                      <div className="flex gap-2 mb-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditClick(contact)}
+                          className="flex-1"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setDeleteContactId(contact.id)}
+                          className="flex-1"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                      </div>
                       <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted group">
                         <img
                           src={contact.composite_image_url}
@@ -337,6 +451,82 @@ const CompositeGallery = () => {
           </CardContent>
         </Card>
       </main>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Contact</DialogTitle>
+            <DialogDescription>Update the contact information</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="first_name">First Name</Label>
+              <Input
+                id="first_name"
+                value={editForm.first_name}
+                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="last_name">Last Name</Label>
+              <Input
+                id="last_name"
+                value={editForm.last_name}
+                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="company">Company</Label>
+              <Input
+                id="company"
+                value={editForm.company}
+                onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="logo_url">Logo URL</Label>
+              <Input
+                id="logo_url"
+                value={editForm.logo_url}
+                onChange={(e) => setEditForm({ ...editForm, logo_url: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingContact(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteContactId} onOpenChange={(open) => !open && setDeleteContactId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this contact? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteContact} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
