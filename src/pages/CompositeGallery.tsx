@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, RefreshCw, Download, Trash2, Edit } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, RefreshCw, Download, Trash2, Edit, XCircle, Save } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -270,18 +271,20 @@ const CompositeGallery = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="border-b bg-card/90 backdrop-blur-md shadow-[var(--shadow-card)] sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to={`/campaigns/${id}`}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="hover:bg-primary/10">
+                <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Composite Images Gallery</h1>
-              <p className="text-sm text-muted-foreground">
-                {campaign.name} - {contacts.length} images
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Composite Gallery
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {campaign.name} • {contacts.length} images generated
               </p>
             </div>
           </div>
@@ -289,8 +292,9 @@ const CompositeGallery = () => {
             variant="outline"
             onClick={handleRegenerateComposites}
             disabled={isRegenerating}
+            className="hover:border-primary hover:text-primary transition-[var(--transition-smooth)]"
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRegenerating ? 'animate-spin' : ''}`} />
             {isRegenerating ? "Regenerating..." : "Regenerate All"}
           </Button>
         </div>
@@ -299,15 +303,18 @@ const CompositeGallery = () => {
       <main className="container mx-auto px-6 py-8">
         {/* Composite Errors Display */}
         {compositeErrors.length > 0 && (
-          <Card className="mb-8 shadow-[var(--shadow-card)] border-destructive/50 bg-destructive/5">
+          <Card className="mb-8 shadow-[var(--shadow-elegant)] border-destructive/60 bg-gradient-to-br from-destructive/10 to-destructive/5">
             <CardHeader>
-              <CardTitle className="text-destructive">Composite Generation Errors</CardTitle>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <XCircle className="h-5 w-5" />
+                Generation Errors ({compositeErrors.length})
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-64 overflow-y-auto">
                 {compositeErrors.map((error, index) => (
-                  <div key={index} className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                    <p className="text-sm text-foreground font-mono">{error}</p>
+                  <div key={index} className="p-4 bg-card border border-destructive/30 rounded-lg hover:border-destructive/50 transition-[var(--transition-smooth)]">
+                    <p className="text-sm text-foreground font-mono leading-relaxed">{error}</p>
                   </div>
                 ))}
               </div>
@@ -316,75 +323,82 @@ const CompositeGallery = () => {
         )}
 
         {/* Gallery */}
-        <Card className="shadow-[var(--shadow-card)] border-border/50">
-          <CardHeader>
+        <Card className="shadow-[var(--shadow-elegant)] border-border/60 bg-card/80 backdrop-blur-sm">
+          <CardHeader className="border-b border-border/40">
             <div className="flex items-center justify-between">
-              <CardTitle>
+              <CardTitle className="text-2xl">
                 Page {currentPage} of {totalPages}
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  (Showing {paginatedContacts.length} of {contacts.length} images)
-                </span>
               </CardTitle>
+              <Badge variant="secondary" className="text-sm px-4 py-1">
+                {paginatedContacts.length} of {contacts.length} images
+              </Badge>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             {contacts.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No composite images found</p>
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {paginatedContacts.map((contact) => (
-                    <div key={contact.id} className="space-y-2">
-                      <div className="flex gap-2 mb-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEditClick(contact)}
-                          className="flex-1"
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => setDeleteContactId(contact.id)}
-                          className="flex-1"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </Button>
-                      </div>
-                      <div className="aspect-video relative rounded-lg overflow-hidden border border-border/50 bg-muted group">
-                        <img
-                          src={contact.composite_image_url}
-                          alt={`Composite for ${contact.company || contact.email}`}
-                          className="w-full h-full object-contain"
-                        />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              handleDownloadImage(
-                                contact.composite_image_url,
-                                `composite-${contact.company || contact.email}.png`
-                              )
-                            }
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Download
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="text-sm space-y-1">
-                        <p className="font-medium text-foreground">
-                          {contact.company || "No company"}
-                        </p>
-                        <p className="text-muted-foreground text-xs">{contact.email}</p>
-                      </div>
+                    <div key={contact.id} className="group">
+                      <Card className="overflow-hidden border-border/60 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elegant)] transition-[var(--transition-smooth)] hover:border-primary/40">
+                        <CardContent className="p-0">
+                          <div className="aspect-video relative bg-muted/30 overflow-hidden">
+                            <img
+                              src={contact.composite_image_url}
+                              alt={`Composite for ${contact.company || contact.email}`}
+                              className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  handleDownloadImage(
+                                    contact.composite_image_url,
+                                    `composite-${contact.company || contact.email}.png`
+                                  )
+                                }
+                                className="shadow-lg"
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-foreground truncate">
+                                {contact.company || "No company"}
+                              </p>
+                              <p className="text-muted-foreground text-xs truncate">{contact.email}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditClick(contact)}
+                                className="flex-1 hover:bg-primary/10 hover:border-primary hover:text-primary"
+                              >
+                                <Edit className="h-3.5 w-3.5 mr-1.5" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDeleteContactId(contact.id)}
+                                className="flex-1 hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   ))}
                 </div>
@@ -454,10 +468,10 @@ const CompositeGallery = () => {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Edit Contact</DialogTitle>
-            <DialogDescription>Update the contact information</DialogDescription>
+            <DialogTitle className="text-2xl">Edit Contact</DialogTitle>
+            <DialogDescription>Update contact information and regenerate the composite image if needed</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -501,11 +515,14 @@ const CompositeGallery = () => {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditingContact(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
+            <Button onClick={handleSaveEdit} className="bg-gradient-to-r from-primary to-accent hover:opacity-90">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -514,15 +531,22 @@ const CompositeGallery = () => {
       <AlertDialog open={!!deleteContactId} onOpenChange={(open) => !open && setDeleteContactId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this contact? This action cannot be undone.
+            <AlertDialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Delete Contact
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              Are you sure you want to permanently delete this contact and their composite image? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteContact} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+            <AlertDialogAction 
+              onClick={handleDeleteContact} 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

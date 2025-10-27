@@ -813,18 +813,20 @@ const CampaignDetail = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="border-b bg-card/90 backdrop-blur-md shadow-[var(--shadow-card)] sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/dashboard">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="hover:bg-primary/10">
+                <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-foreground">{campaign.name}</h1>
-                <Badge className="bg-primary text-primary-foreground">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  {campaign.name}
+                </h1>
+                <Badge className="bg-gradient-to-r from-primary to-accent text-white border-0">
                   {campaign.status}
                 </Badge>
                 {campaign.processing_status && campaign.processing_status !== "idle" && (
@@ -861,6 +863,7 @@ const CampaignDetail = () => {
                   onClick={handleGenerateLocalComposites} 
                   disabled={isGenerating || isProcessingPipeline || isGeneratingLocally}
                   variant="outline"
+                  className="hover:bg-gradient-to-r hover:from-primary/10 hover:to-accent/10 hover:border-primary"
                 >
                   <Laptop className="h-4 w-4 mr-2" />
                   {isGeneratingLocally ? `Generating ${localProgress.current}/${localProgress.total}...` : "Generate Locally"}
@@ -961,43 +964,55 @@ const CampaignDetail = () => {
       <main className="container mx-auto px-6 py-8">
         {/* Local Generation Progress */}
         {isGeneratingLocally && (
-          <Card className="mb-8 shadow-[var(--shadow-card)] border-border/50 bg-accent/5">
+          <Card className="mb-8 shadow-[var(--shadow-elegant)] border-primary/30 bg-gradient-to-br from-primary/5 to-accent/5 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Laptop className="h-5 w-5 animate-pulse" />
-                Generating Locally in Browser
+              <CardTitle className="flex items-center gap-3 text-2xl">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-accent">
+                  <Laptop className="h-6 w-6 text-white animate-pulse" />
+                </div>
+                <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  Local Generation in Progress
+                </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-foreground">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-base font-semibold text-foreground">
                     Processing: {localProgress.currentContact}
                   </span>
-                  <span className="text-sm text-muted-foreground">
-                    {localProgress.current} of {localProgress.total}
-                  </span>
+                  <Badge variant="secondary" className="text-sm px-3 py-1">
+                    {localProgress.current} / {localProgress.total}
+                  </Badge>
                 </div>
                 <Progress 
                   value={(localProgress.current / localProgress.total) * 100} 
-                  className="h-3" 
+                  className="h-4 shadow-inner" 
                 />
               </div>
               {localProgress.errors.length > 0 && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                  <p className="text-sm font-medium text-destructive mb-2">
-                    Errors ({localProgress.errors.length}):
-                  </p>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {localProgress.errors.map((error, i) => (
-                      <p key={i} className="text-xs text-destructive/90">{error}</p>
-                    ))}
-                  </div>
-                </div>
+                <Card className="border-destructive/40 bg-gradient-to-br from-destructive/10 to-destructive/5">
+                  <CardContent className="p-4">
+                    <p className="text-sm font-semibold text-destructive mb-3 flex items-center gap-2">
+                      <XCircle className="h-4 w-4" />
+                      Errors ({localProgress.errors.length}):
+                    </p>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                      {localProgress.errors.map((error, i) => (
+                        <div key={i} className="p-2 bg-card border border-destructive/20 rounded text-xs text-foreground font-mono">
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-              <p className="text-xs text-muted-foreground">
-                💡 Local generation runs in your browser - no server limits or timeouts!
-              </p>
+              <div className="flex items-center gap-2 p-3 bg-card/60 rounded-lg border border-border/50">
+                <div className="text-2xl">💡</div>
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Browser-side generation:</strong> No server limits or timeouts - all processing happens locally!
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
