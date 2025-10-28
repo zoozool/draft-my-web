@@ -42,14 +42,28 @@ const ErrorLogs = () => {
   const fetchLogs = async () => {
     setLoading(true);
     try {
+      // Fetch client logs
+      const { data: clientData, error: clientError } = await supabase.functions.invoke("get-logs", {
+        body: { logType: "client" }
+      });
+
+      const parsedClientLogs: LogEntry[] = [];
+      if (!clientError && clientData?.logs) {
+        parsedClientLogs.push(...clientData.logs.map((log: any) => ({
+          id: log.id || Math.random().toString(),
+          timestamp: new Date(log.timestamp / 1000).toLocaleString(),
+          level: log.level || "info",
+          message: log.event_message || log.message || "No message",
+          function_name: log.function_id || "Unknown"
+        })));
+      }
+
       // Fetch edge function logs
       const { data: edgeData, error: edgeError } = await supabase.functions.invoke("get-logs", {
         body: { logType: "edge" }
       });
 
-      if (edgeError) throw edgeError;
-
-      if (edgeData?.logs) {
+      if (!edgeError && edgeData?.logs) {
         const parsedEdgeLogs = edgeData.logs.map((log: any) => ({
           id: log.id || Math.random().toString(),
           timestamp: new Date(log.timestamp / 1000).toLocaleString(),
@@ -57,7 +71,9 @@ const ErrorLogs = () => {
           message: log.event_message || log.message || "No message",
           function_name: log.function_id || "Unknown"
         }));
-        setEdgeLogs(parsedEdgeLogs);
+        setEdgeLogs([...parsedClientLogs, ...parsedEdgeLogs]);
+      } else {
+        setEdgeLogs(parsedClientLogs);
       }
 
       // Fetch auth logs
@@ -175,12 +191,24 @@ const ErrorLogs = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="edge" className="space-y-4">
+      <Tabs defaultValue="client" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="client">Client Errors</TabsTrigger>
           <TabsTrigger value="edge">Edge Functions</TabsTrigger>
           <TabsTrigger value="auth">Authentication</TabsTrigger>
           <TabsTrigger value="db">Database</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="client">
+          <Card>
+            <CardHeader>
+              <CardTitle>Client Error Logs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {renderLogsTable(edgeLogs)}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="edge">
           <Card>

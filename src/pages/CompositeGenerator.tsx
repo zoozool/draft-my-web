@@ -80,6 +80,24 @@ const CompositeGenerator = () => {
     });
   };
 
+  const logError = async (errorMessage: string, errorDetails: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("error_logs").insert({
+          user_id: user.id,
+          log_type: "client",
+          level: "error",
+          function_name: "composite-generator",
+          error_message: errorMessage,
+          error_details: errorDetails,
+        });
+      }
+    } catch (logError) {
+      console.error("Failed to log error:", logError);
+    }
+  };
+
   const handleGenerateTestComposite = async () => {
     if (!testBaseImage || !testLogoUrl) {
       toast.error("Please provide both base image and logo URL");
@@ -95,7 +113,13 @@ const CompositeGenerator = () => {
         }
       );
 
-      if (cacheError) throw cacheError;
+      if (cacheError) {
+        await logError("Failed to cache logo", { 
+          error: cacheError.message,
+          logoUrl: testLogoUrl 
+        });
+        throw cacheError;
+      }
 
       const cachedLogoUrl = cachedLogoData.cachedUrl;
       const [baseImg, logoImg] = await Promise.all([
@@ -107,8 +131,15 @@ const CompositeGenerator = () => {
       const compositeUrl = URL.createObjectURL(compositeBlob);
       setGeneratedTestImage(compositeUrl);
       toast.success("Test composite generated successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating test composite:", error);
+      await logError("Failed to generate test composite", {
+        error: error.message,
+        stack: error.stack,
+        baseImage: testBaseImage,
+        logoUrl: testLogoUrl,
+        coordinates: testCoordinates,
+      });
       toast.error("Failed to generate test composite");
     } finally {
       setIsGenerating(false);

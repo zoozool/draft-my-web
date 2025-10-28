@@ -121,6 +121,39 @@ export type Database = {
           },
         ]
       }
+      error_logs: {
+        Row: {
+          created_at: string
+          error_details: Json | null
+          error_message: string
+          function_name: string | null
+          id: string
+          level: string
+          log_type: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_details?: Json | null
+          error_message: string
+          function_name?: string | null
+          id?: string
+          level: string
+          log_type: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_details?: Json | null
+          error_message?: string
+          function_name?: string | null
+          id?: string
+          level?: string
+          log_type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       smtp_settings: {
         Row: {
           composite_batch_size: number

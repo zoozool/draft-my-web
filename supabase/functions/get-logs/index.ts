@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,47 +14,61 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { logType } = await req.json();
     
-    // Return mock data for now - in production you'd query actual Supabase analytics
-    const mockLogs = {
-      edge: [
-        {
-          id: "1",
-          timestamp: Date.now() * 1000,
-          level: "error",
-          event_message: "Edge function execution failed",
-          function_id: "generate-composite-images"
-        },
-        {
-          id: "2",
-          timestamp: Date.now() * 1000,
-          level: "warning",
-          event_message: "Slow edge function response",
-          function_id: "send-emails"
-        }
-      ],
-      auth: [
-        {
-          id: "1",
-          timestamp: Date.now() * 1000,
-          level: "error",
-          msg: "Authentication failed",
-          event_message: "Invalid credentials"
-        }
-      ],
-      db: [
-        {
-          id: "1",
-          timestamp: Date.now() * 1000,
-          error_severity: "ERROR",
-          event_message: "Database connection timeout"
-        }
-      ]
-    };
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const logs = mockLogs[logType as keyof typeof mockLogs] || [];
+    // Get user from auth header
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Fetch real logs from database
+    const { data: logs, error: logsError } = await supabase
+      .from("error_logs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("log_type", logType)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (logsError) {
+      console.error("Error fetching logs:", logsError);
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch logs" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Format logs for frontend
+    const formattedLogs = (logs || []).map((log) => ({
+      id: log.id,
+      timestamp: new Date(log.created_at).getTime() * 1000,
+      level: log.level,
+      event_message: log.error_message,
+      msg: log.error_message,
+      error_severity: log.level.toUpperCase(),
+      function_id: log.function_name || "Unknown",
+      message: log.error_message,
+      details: log.error_details,
+    }));
 
     return new Response(
-      JSON.stringify({ logs }),
+      JSON.stringify({ logs: formattedLogs }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
