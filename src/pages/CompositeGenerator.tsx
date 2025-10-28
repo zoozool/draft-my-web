@@ -97,7 +97,7 @@ const CompositeGenerator = () => {
 
       if (cacheError) throw cacheError;
 
-      const cachedLogoUrl = cachedLogoData.url;
+      const cachedLogoUrl = cachedLogoData.cachedUrl;
       const [baseImg, logoImg] = await Promise.all([
         loadImage(testBaseImage),
         loadImage(cachedLogoUrl),
