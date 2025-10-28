@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Download, X } from "lucide-react";
+import { ArrowLeft, Sparkles, Download, X, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 const CompositeGenerator = () => {
   const navigate = useNavigate();
@@ -20,6 +21,20 @@ const CompositeGenerator = () => {
   });
   const [generatedTestImage, setGeneratedTestImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const { data: campaigns } = useQuery({
+    queryKey: ["campaigns-base-images"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("id, name, base_image_url")
+        .not("base_image_url", "is", null)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const loadImage = (url: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
@@ -129,18 +144,52 @@ const CompositeGenerator = () => {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
           <Card className="p-6">
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="testBaseImage">Base Image URL</Label>
-                <Input
-                  id="testBaseImage"
-                  placeholder="https://example.com/base-image.png"
-                  value={testBaseImage}
-                  onChange={(e) => setTestBaseImage(e.target.value)}
-                />
+              <Label>Select Base Image from Gallery</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+                {campaigns?.map((campaign) => (
+                  <div
+                    key={campaign.id}
+                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
+                      testBaseImage === campaign.base_image_url
+                        ? "border-primary ring-2 ring-primary/20"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setTestBaseImage(campaign.base_image_url || "")}
+                  >
+                    <img
+                      src={campaign.base_image_url || ""}
+                      alt={campaign.name}
+                      className="w-full h-32 object-cover rounded-lg"
+                    />
+                    {testBaseImage === campaign.base_image_url && (
+                      <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1 truncate px-1">
+                      {campaign.name}
+                    </p>
+                  </div>
+                ))}
               </div>
+            </div>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="testBaseImage">Or Enter Base Image URL</Label>
+                  <Input
+                    id="testBaseImage"
+                    placeholder="https://example.com/base-image.png"
+                    value={testBaseImage}
+                    onChange={(e) => setTestBaseImage(e.target.value)}
+                  />
+                </div>
 
               <div>
                 <Label htmlFor="testLogoUrl">Logo URL</Label>
@@ -257,8 +306,9 @@ const CompositeGenerator = () => {
                   </p>
                 </div>
               )}
-            </div>
-          </Card>
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
