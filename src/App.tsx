@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import NewCampaign from "./pages/NewCampaign";
 import CampaignDetail from "./pages/CampaignDetail";
 import CompositeGallery from "./pages/CompositeGallery";
+import CompositeGenerator from "./pages/CompositeGenerator";
 import Settings from "./pages/Settings";
 import ErrorLogs from "./pages/ErrorLogs";
 import Auth from "./pages/Auth";
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/campaigns/new" element={<NewCampaign />} />
           <Route path="/campaigns/:id" element={<CampaignDetail />} />
           <Route path="/campaigns/:id/composites" element={<CompositeGallery />} />
+          <Route path="/composite-generator" element={<CompositeGenerator />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/settings/logs" element={<ErrorLogs />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
