@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -91,13 +91,13 @@ const Scrape = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="company_name">Company Name</Label>
-              <Input
+              <Label htmlFor="company_name">Company Names</Label>
+              <Textarea
                 id="company_name"
-                placeholder="e.g., Microsoft, Apple, Tesla"
+                placeholder="Enter company names (one per line)&#10;e.g.,&#10;Microsoft&#10;Apple&#10;Tesla"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                className="min-h-[150px]"
               />
             </div>
 
