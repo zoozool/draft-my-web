@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.cache-logo]
 verify_jwt = false
+
+[functions.web-search]
+verify_jwt = true

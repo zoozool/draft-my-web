@@ -162,6 +162,7 @@ export type Database = {
           id: string
           is_active: boolean
           last_tested_at: string | null
+          search_api_key: string | null
           smtp_from_email: string
           smtp_from_name: string
           smtp_host: string
@@ -180,6 +181,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_tested_at?: string | null
+          search_api_key?: string | null
           smtp_from_email: string
           smtp_from_name: string
           smtp_host: string
@@ -198,6 +200,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_tested_at?: string | null
+          search_api_key?: string | null
           smtp_from_email?: string
           smtp_from_name?: string
           smtp_host?: string

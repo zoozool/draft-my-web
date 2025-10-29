@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity, Settings, Sparkles } from "lucide-react";
+import { Mail, Clock, CheckCircle2, XCircle, Plus, TrendingUp, LogOut, Activity, Settings, Sparkles, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -109,6 +109,12 @@ const Dashboard = () => {
               <Button variant="outline">
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
+              </Button>
+            </Link>
+            <Link to="/scrape">
+              <Button variant="outline">
+                <Search className="mr-2 h-4 w-4" />
+                Web Scraper
               </Button>
             </Link>
             <Link to="/campaigns/new">

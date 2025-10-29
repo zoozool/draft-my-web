@@ -21,6 +21,7 @@ const settingsSchema = z.object({
   is_active: z.boolean(),
   emails_per_hour_limit: z.number().int().min(1, "Limit must be at least 1").max(10000, "Limit cannot exceed 10,000"),
   composite_batch_size: z.number().int().min(5, "Batch size must be at least 5").max(100, "Batch size cannot exceed 100"),
+  search_api_key: z.string().optional(),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -45,6 +46,7 @@ const Settings = () => {
     is_active: true,
     emails_per_hour_limit: 100,
     composite_batch_size: 5,
+    search_api_key: "",
   });
 
   useEffect(() => {
@@ -76,6 +78,7 @@ const Settings = () => {
           is_active: data.is_active,
           emails_per_hour_limit: data.emails_per_hour_limit || 100,
           composite_batch_size: data.composite_batch_size || 5,
+          search_api_key: data.search_api_key || "",
         });
         setTestStatus(data.test_status);
       }
@@ -198,6 +201,7 @@ const Settings = () => {
           is_active: formData.is_active,
           emails_per_hour_limit: formData.emails_per_hour_limit,
           composite_batch_size: formData.composite_batch_size,
+          search_api_key: formData.search_api_key || null,
           test_status: testStatus || null,
           last_tested_at: testStatus ? new Date().toISOString() : null,
         }, {
@@ -321,6 +325,30 @@ const Settings = () => {
               )}
               <p className="text-sm text-muted-foreground">
                 Number of composite images to generate each time you click "Generate Composites" (5-100)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Web Search API</CardTitle>
+            <CardDescription>
+              Configure your Bing Search API key for the web scraper
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="search_api_key">Bing Search API Key</Label>
+              <Input
+                id="search_api_key"
+                type="password"
+                placeholder="Enter your Bing Search API key"
+                value={formData.search_api_key}
+                onChange={(e) => setFormData({ ...formData, search_api_key: e.target.value })}
+              />
+              <p className="text-sm text-muted-foreground">
+                Get your API key from <a href="https://www.microsoft.com/en-us/bing/apis/bing-web-search-api" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Microsoft Bing Search API</a>
               </p>
             </div>
           </CardContent>
